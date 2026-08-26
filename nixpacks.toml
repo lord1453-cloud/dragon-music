@@ -1,3 +1,24 @@
 [phases.setup]
-nixPkgs = ["python311", "ffmpeg"]
-aptPkgs = ["libx11-6", "libxext6"]
+nixPkgs = [
+    "python311",
+    "ffmpeg",
+    "xorg.libX11",
+    "xorg.libXext",
+    "xorg.libXrandr",
+    "xorg.libXdamage",
+    "xorg.libXfixes",
+    "xorg.libxcb",
+    "alsa-lib"
+]
+aptPkgs = [
+    "libx11-6",
+    "libxext6",
+    "libxrandr2",
+    "libxdamage1",
+    "libxfixes3",
+    "libxcb1",
+    "libasound2"
+]
+
+[variables]
+NIXPACKS_ALLOW_ROOT = "1"
