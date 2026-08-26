@@ -296,3 +296,26 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(_executor, _download)
 
+
+async def cleanup_old_streams(keep_path: Optional[str] = None):
+    """
+    Eski stream dosyalarını arka planda temizler.
+    Bellek ve disk kullanımını düşük tutar.
+    """
+    import glob
+
+    def _clean():
+        try:
+            for f in glob.glob(os.path.join(DOWNLOADS_DIR, "stream_*")):
+                if keep_path and os.path.abspath(f) == os.path.abspath(keep_path):
+                    continue
+                try:
+                    os.remove(f)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    await asyncio.to_thread(_clean)
+
+

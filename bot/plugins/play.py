@@ -16,17 +16,19 @@ import asyncio
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pytgcalls.types import MediaStream, AudioQuality
+from pytgcalls import PyTgCalls
+from pytgcalls.types import MediaStream, AudioQuality, Update
 
-from bot.clients import call_client
+from bot.clients import bot_client, call_client
 from bot.theme import (
     msg_searching, msg_playing, msg_queued,
     msg_error, msg_usage, msg_no_voice_chat,
 )
 from utils.queue_manager import queue
-from utils.ytdl import search_youtube, get_audio_file_for_stream
+from utils.ytdl import search_youtube, get_audio_file_for_stream, cleanup_old_streams
 
 logger = logging.getLogger(__name__)
+
 
 # ── Pürüzsüz ve Kararlı Akış FFmpeg Parametreleri ─────────────
 # '-re': Yerel dosyayı gerçek zamanlı (1.0x hızıyla) okuyarak WebRTC
@@ -88,12 +90,23 @@ async def _play_next(client: Client, chat_id: int, message: Message = None):
         if not file_path:
             if message:
                 await message.reply_text(msg_error("Ses dosyası indirilemedi."))
+            else:
+                try:
+                    await bot_client.send_message(
+                        chat_id,
+                        msg_error(f"'{track.get('title')}' indirilemedi, sıradaki şarkıya geçiliyor...")
+                    )
+                except Exception:
+                    pass
             await _play_next(client, chat_id, message)
             return
 
         if os.path.getsize(file_path) < 10000:
             logger.warning(f"Dosya çok küçük: {file_path}")
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
             file_path = await get_audio_file_for_stream(track["url"])
             if not file_path:
                 await _play_next(client, chat_id, message)
@@ -108,24 +121,65 @@ async def _play_next(client: Client, chat_id: int, message: Message = None):
             await message.reply_text(
                 msg_playing(track["title"], track.get("duration_str", ""))
             )
+        else:
+            try:
+                await bot_client.send_message(
+                    chat_id,
+                    msg_playing(track["title"], track.get("duration_str", ""))
+                )
+            except Exception:
+                pass
 
         await _prefetch_next(chat_id)
+        asyncio.create_task(cleanup_old_streams(keep_path=file_path))
 
     except Exception as e:
         logger.error(f"Şarkı çalma hatası: {e}")
         if message:
             await message.reply_text(msg_error(str(e)))
+        else:
+            try:
+                await bot_client.send_message(chat_id, msg_error(f"Oynatma hatası: {e}"))
+            except Exception:
+                pass
+        await queue.clear(chat_id)
 
 
-@Client.on_message(filters.command("oynat") & filters.group)
+# ── PyTgCalls Olay Dinleyicileri (Event Handlers) ─────────────
+
+@call_client.on_stream_end()
+async def stream_end_handler(client: PyTgCalls, update: Update):
+    """
+    Şarkı bittiğinde PyTgCalls tarafından tetiklenir.
+    Kuyruktaki sıradaki şarkıyı otomatik olarak çalar.
+    """
+    chat_id = update.chat_id
+    logger.info(f"🎵 Stream bitti (chat_id: {chat_id}), sıradaki şarkıya geçiliyor...")
+    await _play_next(bot_client, chat_id)
+
+
+@call_client.on_closed_voice_chat()
+@call_client.on_kicked()
+@call_client.on_left()
+async def stream_closed_handler(client: PyTgCalls, chat_id: int):
+    """
+    Sesli sohbet kapandığında, bot atıldığında veya ayrıldığında çağrılır.
+    O sohbetin kuyruğunu temizler.
+    """
+    logger.info(f"🛑 Sesli sohbet sonlandı veya bot ayrıldı (chat_id: {chat_id})")
+    await queue.clear(chat_id)
+
+
+@Client.on_message(filters.command(["oynat", "play"]) & filters.group)
 async def play_command(client: Client, message: Message):
     """
-    /oynat <şarkı adı veya link> komutu.
+    /oynat veya /play <şarkı adı veya link> komutu.
     """
     if len(message.command) < 2:
         await message.reply_text(
             msg_usage("/oynat <şarkı adı veya link>", "/oynat Tarkan Şımarık")
         )
+
         return
 
     query = " ".join(message.command[1:])
@@ -161,13 +215,18 @@ async def play_command(client: Client, message: Message):
             file_path = await get_audio_file_for_stream(result["url"])
             if not file_path:
                 await status_msg.edit_text(msg_error("Ses dosyası indirilemedi."))
+                await queue.clear(chat_id)
                 return
 
             if os.path.getsize(file_path) < 10000:
-                os.remove(file_path)
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
                 file_path = await get_audio_file_for_stream(result["url"])
                 if not file_path:
                     await status_msg.edit_text(msg_error("Ses dosyası bozuk!"))
+                    await queue.clear(chat_id)
                     return
 
             audio_stream = _make_audio_stream(file_path)
@@ -191,7 +250,9 @@ async def play_command(client: Client, message: Message):
             await status_msg.edit_text(
                 msg_playing(track["title"], track.get("duration_str", ""))
             )
+            await _prefetch_next(chat_id)
         except Exception as e:
             logger.error(f"Çalma hatası: {e}")
             await status_msg.edit_text(msg_error(str(e)))
             await queue.clear(chat_id)
+

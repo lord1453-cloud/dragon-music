@@ -53,19 +53,28 @@ COMMANDS_TEXT = f"""
 {SCROLL} **EJDERHA KOMUTLARI** {SCROLL}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-{FIRE} `/oynat <şarkı adı veya link>`
+{FIRE} `/oynat` veya `/play <şarkı adı veya link>`
 ↳ Ejderha müziği ateşler! Çalıyorsa sıraya ekler.
 
-{PAUSE} `/duraklat`
+{PAUSE} `/duraklat` veya `/pause`
 ↳ Ejderha nefesini tutar, müzik durur.
 
-{PLAY} `/devam`
+{PLAY} `/devam` veya `/resume`
 ↳ Ejderha tekrar kükreyerek çalmaya devam eder!
 
-{SKIP} `/gec`
+{SKIP} `/gec` veya `/atla` veya `/skip`
 ↳ Ejderha sıradaki şarkıya kanat çırpar.
 
-{QUEUE} `/sira`
+🛑 `/bitir` veya `/dur` veya `/stop`
+↳ Müziği durdurur, kuyruğu temizler ve sohbetten ayrılır.
+
+🔀 `/karistir` veya `/shuffle`
+↳ Kuyruktaki şarkıları rastgele karıştırır.
+
+🧹 `/temizle` veya `/clear`
+↳ Sıradaki tüm bekleyen şarkıları temizler.
+
+{QUEUE} `/sira` veya `/queue`
 ↳ Ejderhanın müzik kuyruğunu gösterir.
 
 {DOWNLOAD} `/indir <şarkı adı veya link>`
@@ -179,6 +188,19 @@ def msg_skipped(next_title: str = None) -> str:
             f"{MUSIC} Şimdi çalıyor: **{next_title}**"
         )
     return f"{SKIP} **Ejderha Kanat Çırptı!** {DRAGON}\n\n{SCROLL} Kuyruk boş! Ejderha uykuya dalıyor... 💤"
+
+def msg_stopped() -> str:
+    """Müzik durdurulup çıkıldığında gösterilecek mesaj."""
+    return f"🛑 **Ejderha Müziği Sonlandırdı!** {DRAGON}\n\n*Sesli sohbetten ayrılındı ve kuyruk temizlendi.* 💤"
+
+def msg_shuffled() -> str:
+    """Kuyruk karıştırıldığında gösterilecek mesaj."""
+    return f"🔀 **Ejderha Kuyruğu Karıştırdı!** {DRAGON_FACE}\n\n*Bekleyen şarkılar rastgele harmanlandı!* {FIRE}"
+
+def msg_queue_cleared() -> str:
+    """Kuyruk temizlendiğinde gösterilecek mesaj."""
+    return f"🧹 **Ejderha Kuyruğu Temizledi!** {DRAGON}\n\n*Bekleyen tüm şarkılar silindi.*"
+
 
 def msg_queue_empty() -> str:
     """Kuyruk boş olduğunda gösterilecek mesaj."""

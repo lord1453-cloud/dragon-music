@@ -22,10 +22,11 @@ from bot.clients import call_client
 from bot.config import DOWNLOADS_DIR
 from bot.theme import (
     msg_paused, msg_resumed, msg_skipped,
+    msg_stopped, msg_shuffled, msg_queue_cleared,
     msg_not_playing, msg_error,
 )
 from utils.queue_manager import queue
-from utils.ytdl import get_audio_file_for_stream
+from utils.ytdl import get_audio_file_for_stream, cleanup_old_streams
 
 logger = logging.getLogger(__name__)
 
@@ -48,30 +49,10 @@ def _make_audio_stream(file_path: str) -> MediaStream:
     )
 
 
-async def _cleanup_old_streams(keep_path: str = None):
-    """
-    Eski stream dosyalarını arka planda temizler.
-    Bellek ve disk kullanımını düşük tutar.
-    """
-    def _clean():
-        try:
-            for f in glob.glob(os.path.join(DOWNLOADS_DIR, "stream_*")):
-                if keep_path and os.path.abspath(f) == os.path.abspath(keep_path):
-                    continue
-                try:
-                    os.remove(f)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-    await asyncio.to_thread(_clean)
-
-
-@Client.on_message(filters.command("duraklat") & filters.group)
+@Client.on_message(filters.command(["duraklat", "pause", "durdur"]) & filters.group)
 async def pause_command(client: Client, message: Message):
     """
-    /duraklat komutu.
+    /duraklat, /pause veya /durdur komutu.
     Sesli sohbetteki müziği duraklatır.
     """
     chat_id = message.chat.id
@@ -88,10 +69,10 @@ async def pause_command(client: Client, message: Message):
         await message.reply_text(msg_error(str(e)))
 
 
-@Client.on_message(filters.command("devam") & filters.group)
+@Client.on_message(filters.command(["devam", "resume", "baslat"]) & filters.group)
 async def resume_command(client: Client, message: Message):
     """
-    /devam komutu.
+    /devam, /resume veya /baslat komutu.
     Duraklatılmış müziği kaldığı yerden devam ettirir.
     """
     chat_id = message.chat.id
@@ -108,10 +89,10 @@ async def resume_command(client: Client, message: Message):
         await message.reply_text(msg_error(str(e)))
 
 
-@Client.on_message(filters.command("gec") & filters.group)
+@Client.on_message(filters.command(["gec", "atla", "skip", "next"]) & filters.group)
 async def skip_command(client: Client, message: Message):
     """
-    /gec komutu.
+    /gec, /atla, /skip veya /next komutu.
     Çalan şarkıyı atlayıp kuyruktaki sıradakine geçer.
     """
     chat_id = message.chat.id
@@ -135,7 +116,7 @@ async def skip_command(client: Client, message: Message):
             )
             await message.reply_text(msg_skipped(next_track["title"]))
 
-            asyncio.create_task(_cleanup_old_streams(keep_path=file_path))
+            asyncio.create_task(cleanup_old_streams(keep_path=file_path))
 
             tracks = await queue.get_queue(chat_id)
             if tracks:
@@ -152,4 +133,58 @@ async def skip_command(client: Client, message: Message):
         await queue.clear(chat_id)
         await message.reply_text(msg_skipped())
 
-        asyncio.create_task(_cleanup_old_streams())
+        asyncio.create_task(cleanup_old_streams())
+
+
+@Client.on_message(filters.command(["bitir", "dur", "son", "stop", "kapat", "leave", "ayril"]) & filters.group)
+async def stop_command(client: Client, message: Message):
+    """
+    /bitir, /dur, /son, /stop, /kapat komutu.
+    Müziği tamamen durdurur, kuyruğu temizler ve sesli sohbetten ayrılır.
+    """
+    chat_id = message.chat.id
+
+    try:
+        await call_client.leave_group_call(chat_id)
+    except Exception:
+        pass
+
+    await queue.clear(chat_id)
+    await message.reply_text(msg_stopped())
+    asyncio.create_task(cleanup_old_streams())
+
+
+@Client.on_message(filters.command(["karistir", "shuffle"]) & filters.group)
+async def shuffle_command(client: Client, message: Message):
+    """
+    /karistir veya /shuffle komutu.
+    Kuyruktaki sıradaki şarkıları rastgele karıştırır.
+    """
+    chat_id = message.chat.id
+
+    success = await queue.shuffle(chat_id)
+    if success:
+        await message.reply_text(msg_shuffled())
+    else:
+        tracks = await queue.get_queue(chat_id)
+        if len(tracks) <= 1:
+            await message.reply_text(msg_error("Karıştırmak için kuyrukta en az 2 şarkı olmalıdır."))
+        else:
+            await message.reply_text(msg_not_playing())
+
+
+@Client.on_message(filters.command(["temizle", "clear", "sirasifirla"]) & filters.group)
+async def clear_command(client: Client, message: Message):
+    """
+    /temizle, /clear veya /sirasifirla komutu.
+    Şu an çalan şarkıyı bozmadan bekleyen kuyruğu temizler.
+    """
+    chat_id = message.chat.id
+
+    success = await queue.clear_queue_only(chat_id)
+    if success:
+        await message.reply_text(msg_queue_cleared())
+    else:
+        await message.reply_text(msg_error("Temizlenecek bekleyen şarkı yok."))
+
+

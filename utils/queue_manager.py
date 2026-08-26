@@ -133,6 +133,39 @@ class QueueManager:
         async with self._lock:
             return self._current.get(chat_id) is not None
 
+    async def shuffle(self, chat_id: int) -> bool:
+        """
+        Kuyruktaki şarkıları rastgele karıştırır.
+
+        Args:
+            chat_id: Grup/sohbet ID'si
+
+        Returns:
+            True karıştırma başarılıysa, False yetersiz şarkı varsa
+        """
+        import random
+        async with self._lock:
+            if chat_id in self._queues and len(self._queues[chat_id]) > 1:
+                random.shuffle(self._queues[chat_id])
+                return True
+            return False
+
+    async def clear_queue_only(self, chat_id: int) -> bool:
+        """
+        Çalan şarkıya dokunmadan sadece bekleyen kuyruğu temizler.
+
+        Args:
+            chat_id: Grup/sohbet ID'si
+
+        Returns:
+            True temizleme yapıldıysa
+        """
+        async with self._lock:
+            if chat_id in self._queues and self._queues[chat_id]:
+                self._queues[chat_id].clear()
+                return True
+            return False
+
 
 # ── Tekil (Singleton) Kuyruk Yöneticisi ──────────────────────
 # Tüm modüller aynı instance'ı kullanır.

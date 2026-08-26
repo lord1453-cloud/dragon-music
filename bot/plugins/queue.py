@@ -10,10 +10,10 @@ from bot.theme import msg_queue_list, msg_queue_empty
 from utils.queue_manager import queue
 
 
-@Client.on_message(filters.command("sira") & filters.group)
+@Client.on_message(filters.command(["sira", "queue", "kuyruk"]) & filters.group)
 async def queue_command(client: Client, message: Message):
     """
-    /sira komutu.
+    /sira, /queue veya /kuyruk komutu.
     Kuyruktaki şarkıları numaralı liste halinde gösterir.
     Çalan parçayı vurgular.
     """
