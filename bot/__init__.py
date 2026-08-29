@@ -1,8 +1,7 @@
 # ============================================
 # 🐲 Ejderha Müzik Botu - Bot Paketi
 # ============================================
-# Bu modül, bot ve userbot istemcilerini dışa açar.
-
-from bot.clients import bot_client, user_client, call_client
-
-__all__ = ["bot_client", "user_client", "call_client"]
+# Bu modül bot paketini tanımlar.
+# Döngüsel import sorununu önlemek için burada doğrudan
+# clients import edilmez; clients modülüne ihtiyaç duyan
+# kodlar doğrudan 'from bot.clients import ...' kullanmalıdır.
