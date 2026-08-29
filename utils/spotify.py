@@ -16,13 +16,19 @@ from typing import Optional, List, Tuple
 import aiohttp
 
 try:
-    import certifi
+    import certifi  # type: ignore
     _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
 except Exception:
     _SSL_CTX = False
 
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+try:
+    import spotipy  # type: ignore
+    from spotipy.oauth2 import SpotifyClientCredentials  # type: ignore
+    HAS_SPOTIPY = True
+except Exception:
+    HAS_SPOTIPY = False
+    spotipy = None
+    SpotifyClientCredentials = None
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +43,10 @@ logger = logging.getLogger(__name__)
 from bot.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
 # Spotipy istemcisini başlat
-_sp_client: Optional[spotipy.Spotify] = None
+_sp_client: Optional[object] = None
 
 
-def _get_spotipy_client() -> spotipy.Spotify:
+def _get_spotipy_client() -> Optional[object]:
     """
     Spotipy istemcisini lazy-init ile oluşturur ve cache'ler.
     İlk çağrıda SpotifyClientCredentials ile yetkilendirme yapar,
@@ -49,6 +55,9 @@ def _get_spotipy_client() -> spotipy.Spotify:
     global _sp_client
     if _sp_client is not None:
         return _sp_client
+
+    if not HAS_SPOTIPY or not SpotifyClientCredentials:
+        return None
 
     try:
         auth_manager = SpotifyClientCredentials(
@@ -62,6 +71,7 @@ def _get_spotipy_client() -> spotipy.Spotify:
         _sp_client = None
 
     return _sp_client
+
 
 
 # ══════════════════════════════════════════════════════════════
