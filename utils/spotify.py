@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # erişim sağlar (track, album, playlist bilgisi çekmek için yeterli).
 
 SPOTIFY_CLIENT_ID = "38a701c5ea734a739c94a031912d1ee2"
-SPOTIFY_CLIENT_SECRET = "GIZLI_ANAHTAR_BURAYA"  # ← Kendi Client Secret değerinizi buraya girin
+SPOTIFY_CLIENT_SECRET = "e70fe8963f4840a8a2865fb1a4b11d37"
 
 # Spotipy istemcisini başlat
 _sp_client: Optional[spotipy.Spotify] = None
