@@ -4,6 +4,7 @@
 # Bot ve userbot istemcilerini başlatır, PyTgCalls'u
 # aktif eder ve botu ayakta tutar.
 # Graceful shutdown ve gelişmiş hata yönetimi içerir.
+# Önemli olayları Telegram log grubuna gönderir.
 
 import os
 import sys
@@ -14,7 +15,7 @@ import logging
 import traceback
 from datetime import datetime
 
-from bot.config import BOT_NAME, BOT_VERSION, LOG_LEVEL, DOWNLOADS_DIR
+from bot.config import BOT_NAME, BOT_VERSION, LOG_LEVEL, DOWNLOADS_DIR, LOG_GROUP_ID
 
 # ── 1. Loglama Ayarları ──────────────────────────────────────
 logging.basicConfig(
@@ -37,6 +38,20 @@ except Exception:
 from bot.clients import bot_client, user_client, call_client
 
 
+# ── 2. Telegram Log Grubu Yardımcı Fonksiyonu ────────────────
+async def send_log(text: str) -> None:
+    """Belirtilen log grubuna mesaj gönderir. Hata olursa sessizce geçer."""
+    if not LOG_GROUP_ID:
+        return
+    try:
+        await bot_client.send_message(
+            chat_id=LOG_GROUP_ID,
+            text=text,
+        )
+    except Exception as e:
+        logger.warning(f"Log grubuna mesaj gönderilemedi: {e}")
+
+
 def _cleanup_downloads():
     """Eski indirme dosyalarını temizler."""
     try:
@@ -55,9 +70,10 @@ def _cleanup_downloads():
 
 async def start_services():
     """Tüm istemcileri sırasıyla ve kontrollü şekilde başlatır."""
+    start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     logger.info("═" * 60)
     logger.info(f"🚀 {BOT_NAME} v{BOT_VERSION} Başlatılıyor...")
-    logger.info(f"🕒 Başlatma Zamanı: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"🕒 Başlatma Zamanı: {start_time}")
     logger.info("═" * 60)
 
     # Eski indirme dosyalarını temizle
@@ -96,6 +112,14 @@ async def start_services():
             logger.error(
                 "👉 ÇÖZÜM: Telegram oturumu sonlandırılmış. Lütfen 'generate_session.py' ile yeniden oturum açın."
             )
+        # Hata mesajını log grubuna gönder
+        await send_log(
+            f"🐲 **EJDERHA BOT - KRİTİK HATA** 🐲\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"❌ Userbot başlatılamadı!\n"
+            f"📛 Hata: `{err_msg[:200]}`\n"
+            f"🕒 Zaman: `{start_time}`"
+        )
         raise
 
     # 3. PyTgCalls Başlat
@@ -106,6 +130,12 @@ async def start_services():
             logger.info("✅ PyTgCalls hazır - Sesli sohbet akışı aktif!")
         except Exception as e:
             logger.error(f"❌ PyTgCalls başlatılamadı: {e}", exc_info=True)
+            await send_log(
+                f"🐲 **EJDERHA BOT - HATA** 🐲\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"❌ PyTgCalls başlatılamadı!\n"
+                f"📛 Hata: `{str(e)[:200]}`"
+            )
             raise
     else:
         logger.warning("⚠️ PyTgCalls modülü aktif değil, sesli sohbet özellikleri devre dışı.")
@@ -114,10 +144,36 @@ async def start_services():
     logger.info(f"✨ {BOT_NAME} tamamen hazır! Ejderha uçuşa geçti!")
     logger.info("═" * 60)
 
+    # ── Başarılı başlatma logunu Telegram grubuna gönder ──
+    await send_log(
+        f"🐲 **EJDERHA BOT BAŞLATILDI** 🐲\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"✅ **Durum:** Tüm servisler aktif!\n"
+        f"🤖 **Bot:** @{bot_info.username}\n"
+        f"🐉 **Userbot:** {user_info.first_name}\n"
+        f"🌋 **PyTgCalls:** {'Aktif' if call_client else 'Devre Dışı'}\n"
+        f"📦 **Sürüm:** `v{BOT_VERSION}`\n"
+        f"🕒 **Zaman:** `{start_time}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"✨ Ejderha uçuşa geçti!"
+    )
+
 
 async def stop_services():
     """Çıkış yapılırken istemcileri güvenle kapatır (Graceful Shutdown)."""
     logger.info("🛑 Servisler kapatılıyor...")
+
+    # Kapatma logunu gruba gönder (bot hâlâ bağlıysa)
+    try:
+        await send_log(
+            f"🐲 **EJDERHA BOT KAPATILIYOR** 🐲\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛑 Bot kapatılıyor...\n"
+            f"🕒 Zaman: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n"
+            f"💤 Ejderha uykuya dalıyor..."
+        )
+    except Exception:
+        pass
 
     if user_client and getattr(user_client, "is_connected", False):
         try:
@@ -146,6 +202,17 @@ async def main():
     except Exception as e:
         logger.critical(f"💥 Bot çalışırken kritik hata oluştu: {e}")
         logger.debug(traceback.format_exc())
+        # Çalışma zamanı hatasını log grubuna gönder
+        try:
+            await send_log(
+                f"🐲 **EJDERHA BOT - KRİTİK HATA** 🐲\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"💥 Çalışma zamanı hatası!\n"
+                f"📛 Hata: `{str(e)[:300]}`\n"
+                f"🕒 Zaman: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
+            )
+        except Exception:
+            pass
     finally:
         await stop_services()
 

@@ -35,6 +35,11 @@ SESSION_STRING: str = clean_session_string(_get_required("SESSION_STRING"))
 AUDIO_BITRATE: int = int(os.getenv("AUDIO_BITRATE", "320"))
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
+# Telegram Log Grubu (Bot loglarını bu gruba gönderir)
+_log_group_raw: Optional[str] = os.getenv("LOG_GROUP_ID")
+LOG_GROUP_ID: Optional[int] = int(_log_group_raw) if _log_group_raw else None
+
+
 # YouTube Cookies Yapılandırması (Bot engeli / 403 aşmak için)
 _cookies_env_path: str = os.getenv("COOKIES_FILE_PATH", "cookies.txt")
 _base_dir: str = os.path.dirname(os.path.dirname(__file__))
