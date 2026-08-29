@@ -34,16 +34,27 @@ from bot.clients import bot_client, user_client, call_client
 
 # ── 2. Telegram Log Grubu Yardımcı Fonksiyonu ────────────────
 async def send_log(text: str) -> None:
-    """Belirtilen log grubuna mesaj gönderir. Hata olursa sessizce geçer."""
+    """Belirtilen log grubuna mesaj gönderir. Bot atamazsa Userbot ile dener."""
     if not LOG_GROUP_ID:
         return
     try:
-        await bot_client.send_message(
-            chat_id=LOG_GROUP_ID,
-            text=text,
-        )
+        if bot_client and getattr(bot_client, "is_connected", False):
+            await bot_client.send_message(
+                chat_id=LOG_GROUP_ID,
+                text=text,
+            )
+            return
     except Exception as e:
-        logger.warning(f"Log grubuna mesaj gönderilemedi: {e}")
+        logger.warning(f"Bot istemcisi ile log gönderilemedi: {e}")
+
+    try:
+        if user_client and getattr(user_client, "is_connected", False):
+            await user_client.send_message(
+                chat_id=LOG_GROUP_ID,
+                text=text,
+            )
+    except Exception as e2:
+        logger.warning(f"Log grubuna mesaj gönderilemedi: {e2}")
 
 
 def _cleanup_downloads():
