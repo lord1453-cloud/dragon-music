@@ -82,6 +82,12 @@ def _cleanup_downloads():
 
 async def start_services():
     """Tüm istemcileri sırasıyla ve kontrollü şekilde başlatır."""
+    loop = asyncio.get_running_loop()
+    bot_client.loop = loop
+    bot_client.dispatcher.loop = loop
+    user_client.loop = loop
+    user_client.dispatcher.loop = loop
+
     start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     logger.info("═" * 60)
     logger.info(f"🚀 {BOT_NAME} v{BOT_VERSION} Başlatılıyor...")
