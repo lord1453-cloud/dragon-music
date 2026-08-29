@@ -28,13 +28,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("EjderhaBot")
 
-try:
-    from pytgcalls import idle  # type: ignore
-except Exception:
-    async def idle():  # type: ignore
-        while True:
-            await asyncio.sleep(3600)
-
+from pyrogram import idle
 from bot.clients import bot_client, user_client, call_client
 
 
@@ -229,17 +223,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    # Graceful shutdown sinyal yakalama (Linux / Docker)
-    if sys.platform != "win32":
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(stop_services()))
-
     try:
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        logger.info("Klavyeden kesme sinyali (Ctrl+C) alındı.")
-    finally:
-        loop.close()
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot kullanıcı tarafından durduruldu.")
