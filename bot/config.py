@@ -23,11 +23,14 @@ def _get_required(key: str) -> str:
     return value
 
 
+from utils.session_cleaner import clean_session_string
+
 # ── Zorunlu Değişkenler ──────────────────────────────────────
-BOT_TOKEN: str = _get_required("BOT_TOKEN")
-API_ID: int = int(_get_required("API_ID"))
-API_HASH: str = _get_required("API_HASH")
-SESSION_STRING: str = _get_required("SESSION_STRING")
+BOT_TOKEN: str = _get_required("BOT_TOKEN").strip().strip("'\"")
+API_ID: int = int(_get_required("API_ID").strip().strip("'\""))
+API_HASH: str = _get_required("API_HASH").strip().strip("'\"")
+SESSION_STRING: str = clean_session_string(_get_required("SESSION_STRING"))
+
 
 # ── Opsiyonel Değişkenler ────────────────────────────────────
 AUDIO_BITRATE: int = int(os.getenv("AUDIO_BITRATE", "320"))
