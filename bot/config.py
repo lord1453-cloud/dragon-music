@@ -7,7 +7,9 @@
 import os
 import sys
 from typing import Optional
-from dotenv import load_dotenv
+
+from dotenv import load_dotenv  # type: ignore[import-untyped]
+from utils.session_cleaner import clean_session_string
 
 # .env dosyasını yükle
 load_dotenv()
@@ -18,12 +20,10 @@ def _get_required(key: str) -> str:
     value = os.getenv(key)
     if not value:
         print(f"🐲 HATA: '{key}' ortam değişkeni bulunamadı!")
-        print(f"🐲 Lütfen .env dosyanızı kontrol edin. (.env.example dosyasına bakın)")
+        print("🐲 Lütfen .env dosyanızı kontrol edin. (.env.example dosyasına bakın)")
         sys.exit(1)
     return value
 
-
-from utils.session_cleaner import clean_session_string
 
 # ── Zorunlu Değişkenler ──────────────────────────────────────
 BOT_TOKEN: str = _get_required("BOT_TOKEN").strip().strip("'\"")
@@ -31,23 +31,22 @@ API_ID: int = int(_get_required("API_ID").strip().strip("'\""))
 API_HASH: str = _get_required("API_HASH").strip().strip("'\"")
 SESSION_STRING: str = clean_session_string(_get_required("SESSION_STRING"))
 
-
 # ── Opsiyonel Değişkenler ────────────────────────────────────
 AUDIO_BITRATE: int = int(os.getenv("AUDIO_BITRATE", "320"))
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
 # YouTube Cookies Yapılandırması (Bot engeli / 403 aşmak için)
-_cookies_env_path = os.getenv("COOKIES_FILE_PATH", "cookies.txt")
-_base_dir = os.path.dirname(os.path.dirname(__file__))
+_cookies_env_path: str = os.getenv("COOKIES_FILE_PATH", "cookies.txt")
+_base_dir: str = os.path.dirname(os.path.dirname(__file__))
 _possible_cookie_paths = [
     _cookies_env_path,
     os.path.join(_base_dir, _cookies_env_path),
     os.path.join(_base_dir, "cookies.txt"),
 ]
 COOKIES_FILE: Optional[str] = None
-for cp in _possible_cookie_paths:
-    if os.path.exists(cp) and os.path.isfile(cp):
-        COOKIES_FILE = os.path.abspath(cp)
+for _cp in _possible_cookie_paths:
+    if os.path.exists(_cp) and os.path.isfile(_cp):
+        COOKIES_FILE = os.path.abspath(_cp)
         break
 
 # Spotify API Yapılandırması
@@ -61,4 +60,3 @@ DOWNLOADS_DIR: str = os.path.join(_base_dir, "downloads")
 
 # İndirme klasörünü oluştur
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-

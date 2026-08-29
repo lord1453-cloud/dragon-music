@@ -5,10 +5,11 @@
 # temiz bir SESSION_STRING üretir veya mevcut session'ı test eder.
 
 import os
-import sys
 import asyncio
-from dotenv import load_dotenv
-from pyrogram import Client
+from typing import Optional
+
+from dotenv import load_dotenv  # type: ignore[import-untyped]
+from pyrogram import Client  # type: ignore[import-untyped]
 from utils.session_cleaner import clean_session_string, validate_session_string
 
 load_dotenv()
@@ -17,11 +18,11 @@ load_dotenv()
 async def test_session(api_id: int, api_hash: str, raw_session: str) -> bool:
     """Mevcut session string'in geçerliliğini test eder."""
     cleaned_session = clean_session_string(raw_session)
-    
+
     if not validate_session_string(cleaned_session):
         print("❌ HATA: Session string Base64 formatına uygun değil (Bozuk padding veya geçersiz karakterler).")
         return False
-        
+
     print("⏳ Telegram sunucusuna bağlanılıyor...")
     try:
         async with Client(
@@ -29,7 +30,7 @@ async def test_session(api_id: int, api_hash: str, raw_session: str) -> bool:
             api_id=api_id,
             api_hash=api_hash,
             session_string=cleaned_session,
-            in_memory=True
+            in_memory=True,
         ) as app:
             me = await app.get_me()
             print("\n" + "═" * 55)
@@ -45,31 +46,32 @@ async def test_session(api_id: int, api_hash: str, raw_session: str) -> bool:
         return False
 
 
-async def generate_new_session(api_id: int, api_hash: str):
+async def generate_new_session(api_id: int, api_hash: str) -> None:
     """Yeni ve temiz bir Pyrogram v2 Session String üretir."""
     print("\n" + "═" * 55)
     print("🐲 Pyrogram String Session Oluşturucu")
     print("═" * 55)
     print("📌 Telefon numaranızı uluslararası formatta girin (Örn: +905xxxxxxxxx)")
-    
+
     async with Client(
         name="session_generator",
         api_id=api_id,
         api_hash=api_hash,
-        in_memory=True
+        in_memory=True,
     ) as app:
         session_str = await app.export_session_string()
         cleaned_session = clean_session_string(session_str)
         me = await app.get_me()
-        
+
         # Telegram Kayıtlı Mesajlar'a gönder
+        saved_msg_info: str
         try:
             await app.send_message(
                 "me",
                 f"🐲 **Ejderha Müzik Botu - SESSION_STRING** 🐲\n\n"
                 f"Hesap: `{me.first_name}` (@{me.username or 'Yok'})\n\n"
                 f"```\n{cleaned_session}\n```\n\n"
-                f"⚠️ **Uyarı:** Bu metni kimseyle paylaşmayın!"
+                f"⚠️ **Uyarı:** Bu metni kimseyle paylaşmayın!",
             )
             saved_msg_info = "✅ Session String ayrıca Telegram'daki 'Kayıtlı Mesajlar' (Saved Messages) kutunuza gönderildi!"
         except Exception:
@@ -85,14 +87,20 @@ async def generate_new_session(api_id: int, api_hash: str):
         print("═" * 55)
 
 
-async def main():
+async def main() -> None:
+    """Ana menü: mevcut session'ı test et veya yeni session üret."""
     print("═" * 55)
     print("🐲 Ejderha Müzik Botu - Session Aracı")
     print("═" * 55)
-    
-    api_id_env = os.getenv("API_ID")
-    api_hash_env = os.getenv("API_HASH")
-    session_string = os.getenv("SESSION_STRING")
+
+    # Ortam değişkenlerini oku
+    api_id_env: Optional[str] = os.getenv("API_ID")
+    api_hash_env: Optional[str] = os.getenv("API_HASH")
+    session_string: Optional[str] = os.getenv("SESSION_STRING")
+
+    # API bilgilerini belirle
+    api_id: int
+    api_hash: str
 
     if api_id_env and api_hash_env:
         print(f"✅ .env dosyasından API_ID ({api_id_env}) ve API_HASH yüklendi.")
