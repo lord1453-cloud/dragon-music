@@ -34,7 +34,6 @@ user_client = Client(
     api_hash=API_HASH,
     session_string=SESSION_STRING,
     in_memory=True,
-    no_updates=True,
 )
 
 # ── PyTgCalls İstemcisi ──────────────────────────────────────
