@@ -29,12 +29,12 @@ logger = logging.getLogger(__name__)
 # ══════════════════════════════════════════════════════════════
 # 1. SPOTİPY YETKİLENDİRME (SpotifyClientCredentials)
 # ══════════════════════════════════════════════════════════════
-# Client ID ve Client Secret ile Spotify Web API'ye bağlanır.
-# Bu flow kullanıcı girişi gerektirmez, sadece uygulama seviyesinde
-# erişim sağlar (track, album, playlist bilgisi çekmek için yeterli).
+# Client ID ve Client Secret Railway ortam değişkenlerinden okunur.
+# Railway Variables sekmesine şu isimleri ekleyin:
+#   SPOTIFY_CLIENT_ID     → Spotify Client ID
+#   SPOTIFY_CLIENT_SECRET → Spotify Client Secret
 
-SPOTIFY_CLIENT_ID = "38a701c5ea734a739c94a031912d1ee2"
-SPOTIFY_CLIENT_SECRET = "e70fe8963f4840a8a2865fb1a4b11d37"
+from bot.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
 # Spotipy istemcisini başlat
 _sp_client: Optional[spotipy.Spotify] = None
