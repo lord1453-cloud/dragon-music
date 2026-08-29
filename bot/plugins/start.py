@@ -1,8 +1,8 @@
 # ============================================
-# 🐲 Ejderha Müzik Botu - Start & Menü Plugin'i
+# 🐲 Ejderha Müzik Botu - Start, Menü & Ayarlar Plugin'i
 # ============================================
-# /start ve /menu komutlarını işler.
-# Ejderha temalı karşılama mesajı ve inline keyboard menüsü gösterir.
+# /start, /menu, /ayarlar, /settings, /yardim, /help
+# komutlarını hem özel mesajda (DM) hem de gruplarda işler.
 
 import logging
 
@@ -10,66 +10,103 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.enums import ParseMode
 
-from bot.theme import WELCOME_TEXT, get_main_menu_keyboard
+from bot.theme import (
+    WELCOME_TEXT, SETTINGS_TEXT, COMMANDS_TEXT, DEVELOPER_TEXT,
+    get_main_menu_keyboard, get_back_button,
+)
 
 logger = logging.getLogger(__name__)
 
 
-@Client.on_message(filters.command(["start", "menu"]) & filters.group)
+async def _safe_reply(message: Message, text: str, reply_markup=None):
+    """Markdown destekli güvenli mesaj gönderme (hata durumunda düz metne düşer)."""
+    try:
+        await message.reply_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    except Exception as e:
+        logger.warning(f"Markdown ile gönderim başarısız ({e}), düz metin deneniyor...")
+        try:
+            await message.reply_text(
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.DISABLED,
+            )
+        except Exception as e2:
+            logger.error(f"Mesaj gönderme hatası: {e2}", exc_info=True)
+
+
+# ── /start ve /menu Komutları ─────────────────────────────────
+@Client.on_message(filters.command(["start", "menu"]))
 async def start_command(client: Client, message: Message):
     """
-    /start veya /menu komutu geldiğinde ejderha temalı
-    karşılama mesajını inline butonlarla birlikte gönderir.
-    Grup sohbetlerinde çalışır.
+    /start veya /menu komutu:
+    Ejderha temalı ana menüyü inline butonlarla birlikte gönderir.
+    Hem DM hem de gruplarda çalışır.
     """
-    logger.info(f"📥 /start komutu alındı - Grup: {message.chat.id}, Kullanıcı: {message.from_user.id if message.from_user else 'Bilinmiyor'}")
-    try:
-        await message.reply_text(
-            text=WELCOME_TEXT,
-            reply_markup=get_main_menu_keyboard(),
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        logger.info("✅ start_command yanıtı gönderildi (Grup)")
-    except Exception as e:
-        logger.error(f"❌ start_command hatası: {e}", exc_info=True)
-        # Markdown parse hatası olursa düz metin olarak gönder
-        try:
-            await message.reply_text(
-                text=WELCOME_TEXT,
-                reply_markup=get_main_menu_keyboard(),
-                parse_mode=ParseMode.DISABLED,
-            )
-            logger.info("✅ start_command düz metin olarak gönderildi (Grup)")
-        except Exception as e2:
-            logger.error(f"❌ start_command fallback hatası: {e2}", exc_info=True)
+    chat_type = "DM" if message.chat.type.value == "private" else "Grup"
+    user_id = message.from_user.id if message.from_user else "?"
+    logger.info(f"📥 /start komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_id}]")
+
+    await _safe_reply(
+        message,
+        text=WELCOME_TEXT,
+        reply_markup=get_main_menu_keyboard(),
+    )
 
 
-@Client.on_message(filters.command(["start", "menu"]) & filters.private)
-async def start_private_command(client: Client, message: Message):
+# ── /ayarlar, /ayar, /settings Komutları ──────────────────────
+@Client.on_message(filters.command(["ayarlar", "ayar", "settings"]))
+async def settings_command(client: Client, message: Message):
     """
-    Özel mesajda /start veya /menu komutu geldiğinde
-    karşılama mesajını gönderir.
+    /ayarlar veya /settings komutu:
+    Bot ve ses motoru ayarlarını gösterir.
+    Hem DM hem de gruplarda çalışır.
     """
-    logger.info(f"📥 /start komutu alındı - DM: {message.from_user.id if message.from_user else 'Bilinmiyor'}")
-    try:
-        await message.reply_text(
-            text=WELCOME_TEXT,
-            reply_markup=get_main_menu_keyboard(),
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        logger.info("✅ start_private_command yanıtı gönderildi (DM)")
-    except Exception as e:
-        logger.error(f"❌ start_private_command hatası: {e}", exc_info=True)
-        # Markdown parse hatası olursa düz metin olarak gönder
-        try:
-            await message.reply_text(
-                text=WELCOME_TEXT,
-                reply_markup=get_main_menu_keyboard(),
-                parse_mode=ParseMode.DISABLED,
-            )
-            logger.info("✅ start_private_command düz metin olarak gönderildi (DM)")
-        except Exception as e2:
-            logger.error(f"❌ start_private_command fallback hatası: {e2}", exc_info=True)
+    chat_type = "DM" if message.chat.type.value == "private" else "Grup"
+    user_id = message.from_user.id if message.from_user else "?"
+    logger.info(f"📥 /ayarlar komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_id}]")
+
+    await _safe_reply(
+        message,
+        text=SETTINGS_TEXT,
+        reply_markup=get_back_button(),
+    )
+
+
+# ── /yardim, /help, /komutlar Komutları ───────────────────────
+@Client.on_message(filters.command(["yardim", "help", "komutlar", "commands"]))
+async def help_command(client: Client, message: Message):
+    """
+    /yardim veya /help komutu:
+    Kullanılabilir tüm bot komutlarını listeler.
+    Hem DM hem de gruplarda çalışır.
+    """
+    chat_type = "DM" if message.chat.type.value == "private" else "Grup"
+    user_id = message.from_user.id if message.from_user else "?"
+    logger.info(f"📥 /yardim komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_id}]")
+
+    await _safe_reply(
+        message,
+        text=COMMANDS_TEXT,
+        reply_markup=get_back_button(),
+    )
+
+
+# ── /gelistirici, /developer Komutları ────────────────────────
+@Client.on_message(filters.command(["gelistirici", "developer", "dev"]))
+async def dev_command(client: Client, message: Message):
+    """
+    /gelistirici veya /developer komutu:
+    Geliştirici bilgilerini gösterir.
+    """
+    await _safe_reply(
+        message,
+        text=DEVELOPER_TEXT,
+        reply_markup=get_back_button(),
+    )
 
 
 # ── Teşhis: Tüm mesajları logla (DEBUG) ──────────────────────
