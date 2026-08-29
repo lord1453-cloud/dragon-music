@@ -1,4 +1,8 @@
-.env 
-*.session 
-__pycache__/ 
+.env
+*.session
+*.session-journal
+*.session-wal
+*.session-shm
+__pycache__/
+.cache/
 downloads/

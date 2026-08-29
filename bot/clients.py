@@ -18,6 +18,7 @@ bot_client = Client(
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
     plugins=dict(root="bot/plugins"),
+    in_memory=True,
 )
 
 # ── Userbot İstemcisi ─────────────────────────────────────────
@@ -28,6 +29,7 @@ user_client = Client(
     api_id=API_ID,
     api_hash=API_HASH,
     session_string=SESSION_STRING,
+    in_memory=True,
 )
 
 # ── PyTgCalls İstemcisi ──────────────────────────────────────

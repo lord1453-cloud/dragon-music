@@ -48,18 +48,32 @@ async def main():
     logger.info("🔥 Eski indirme dosyaları temizlendi.")
 
     # Bot istemcisini başlat
-    await bot_client.start()
-    bot_info = await bot_client.get_me()
-    logger.info(f"🐲 Bot başlatıldı: @{bot_info.username}")
+    try:
+        await bot_client.start()
+        bot_info = await bot_client.get_me()
+        logger.info(f"🐲 Bot başlatıldı: @{bot_info.username}")
+    except Exception as e:
+        logger.error(f"❌ Bot istemcisi başlatılamadı: {e}")
+        raise
 
     # Userbot istemcisini başlat
-    await user_client.start()
-    user_info = await user_client.get_me()
-    logger.info(f"🐉 Userbot başlatıldı: {user_info.first_name}")
+    try:
+        await user_client.start()
+        user_info = await user_client.get_me()
+        logger.info(f"🐉 Userbot başlatıldı: {user_info.first_name}")
+    except Exception as e:
+        logger.error(f"❌ Userbot başlatılamadı: {e}")
+        if "AUTH_KEY_DUPLICATED" in str(e):
+            logger.error("⚠️ AUTH_KEY_DUPLICATED Hatası: Bu session string başka bir yerde aynı anda çalışıyor veya eski oturum sonlandırılmadı. Lütfen çalışan diğer bot/process örneklerini kapatın veya yeni bir SESSION_STRING oluşturun.")
+        raise
 
     # PyTgCalls'u başlat
-    await call_client.start()
-    logger.info("🌋 PyTgCalls başlatıldı - Sesli sohbet hazır!")
+    try:
+        await call_client.start()
+        logger.info("🌋 PyTgCalls başlatıldı - Sesli sohbet hazır!")
+    except Exception as e:
+        logger.error(f"❌ PyTgCalls başlatılamadı: {e}")
+        raise
 
     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     logger.info(f"✨ {BOT_NAME} tamamen hazır! Ejderha uçuşa geçti!")
