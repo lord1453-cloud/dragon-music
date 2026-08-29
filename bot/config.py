@@ -26,18 +26,18 @@ def _get_required(key: str) -> str:
 
 
 # ── Zorunlu Değişkenler ──────────────────────────────────────
-BOT_TOKEN: str = _get_required("BOT_TOKEN").strip().strip("'\"")
-API_ID: int = int(_get_required("API_ID").strip().strip("'\""))
-API_HASH: str = _get_required("API_HASH").strip().strip("'\"")
+BOT_TOKEN: str = _get_required("BOT_TOKEN").strip().strip("'\"").strip()
+API_ID: int = int(_get_required("API_ID").strip().strip("'\"").strip())
+API_HASH: str = _get_required("API_HASH").strip().strip("'\"").strip()
 SESSION_STRING: str = clean_session_string(_get_required("SESSION_STRING"))
 
 # ── Opsiyonel Değişkenler ────────────────────────────────────
-AUDIO_BITRATE: int = int(os.getenv("AUDIO_BITRATE", "320"))
-LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+AUDIO_BITRATE: int = int(os.getenv("AUDIO_BITRATE", "320").strip().strip("'\""))
+LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").strip().strip("'\"").upper()
 
 # Telegram Log Grubu (Bot loglarını bu gruba gönderir)
 _log_group_raw: Optional[str] = os.getenv("LOG_GROUP_ID")
-LOG_GROUP_ID: Optional[int] = int(_log_group_raw) if _log_group_raw else None
+LOG_GROUP_ID: Optional[int] = int(_log_group_raw.strip().strip("'\"")) if _log_group_raw and _log_group_raw.strip() else None
 
 
 # YouTube Cookies Yapılandırması (Bot engeli / 403 aşmak için)

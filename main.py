@@ -116,6 +116,12 @@ async def start_services():
             logger.info(f"✅ Bot bağlandı: @{bot_info.username} [ID: {bot_info.id}]")
         else:
             logger.critical(f"❌ Bot istemcisi başlatılamadı: {e}", exc_info=True)
+            if "API_ID_INVALID" in str(e):
+                logger.error(
+                    "👉 ÇÖZÜM: API_ID veya API_HASH geçersiz! "
+                    "Lütfen Railway 'Variables' sekmesindeki veya .env dosyasındaki API_ID ve API_HASH "
+                    "değerlerini my.telegram.org adresindeki orijinal değerlerle kontrol edin."
+                )
             raise
 
     # 2. Userbot İstemcisini Başlat (Session String)
