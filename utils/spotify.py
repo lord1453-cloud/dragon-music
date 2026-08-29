@@ -1,8 +1,12 @@
 # ============================================
 # 🐲 Ejderha Müzik Botu - Spotify Yardımcıları
 # ============================================
-# Spotify linklerini algılar, spotipy ve fallback yöntemleriyle
-# şarkı/sanatçı bilgilerini çekerek YouTube arama formatına dönüştürür.
+# Spotify linklerini regex ile algılar, spotipy kütüphanesiyle
+# şarkı/sanatçı bilgilerini çeker ve "Sanatçı - Şarkı Adı"
+# formatında YouTube arama sorgusuna dönüştürür.
+#
+# Yetkilendirme: SpotifyClientCredentials (Client Credentials Flow)
+# Fallback: API anahtarı yoksa oEmbed ile başlık çekme
 
 import re
 import ssl
@@ -17,65 +21,119 @@ try:
 except Exception:
     _SSL_CTX = False
 
-try:
-    import spotipy
-    from spotipy.oauth2 import SpotifyClientCredentials
-    HAS_SPOTIPY = True
-except ImportError:
-    HAS_SPOTIPY = False
-
-from bot.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 
 logger = logging.getLogger(__name__)
 
-# ── Spotify Regex Kalıpları ──────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 1. SPOTİPY YETKİLENDİRME (SpotifyClientCredentials)
+# ══════════════════════════════════════════════════════════════
+# Client ID ve Client Secret ile Spotify Web API'ye bağlanır.
+# Bu flow kullanıcı girişi gerektirmez, sadece uygulama seviyesinde
+# erişim sağlar (track, album, playlist bilgisi çekmek için yeterli).
+
+SPOTIFY_CLIENT_ID = "38a701c5ea734a739c94a031912d1ee2"
+SPOTIFY_CLIENT_SECRET = "GIZLI_ANAHTAR_BURAYA"  # ← Kendi Client Secret değerinizi buraya girin
+
+# Spotipy istemcisini başlat
+_sp_client: Optional[spotipy.Spotify] = None
+
+
+def _get_spotipy_client() -> spotipy.Spotify:
+    """
+    Spotipy istemcisini lazy-init ile oluşturur ve cache'ler.
+    İlk çağrıda SpotifyClientCredentials ile yetkilendirme yapar,
+    sonraki çağrılarda aynı instance'ı döndürür.
+    """
+    global _sp_client
+    if _sp_client is not None:
+        return _sp_client
+
+    try:
+        auth_manager = SpotifyClientCredentials(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET,
+        )
+        _sp_client = spotipy.Spotify(auth_manager=auth_manager)
+        logger.info("🟢 Spotify API (spotipy) başarıyla yetkilendirildi.")
+    except Exception as e:
+        logger.error(f"🔴 Spotify yetkilendirme hatası: {e}")
+        _sp_client = None
+
+    return _sp_client
+
+
+# ══════════════════════════════════════════════════════════════
+# 2. REGEX İLE SPOTİFY LİNK TESPİTİ
+# ══════════════════════════════════════════════════════════════
+# Kullanıcıdan gelen mesajın Spotify track linki olup olmadığını
+# kontrol eder. Desteklenen formatlar:
+#   - https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT
+#   - https://open.spotify.com/intl-tr/track/4cOdK2wGLETKBW3PvgPWqT?si=...
+#   - spotify:track:4cOdK2wGLETKBW3PvgPWqT
+
+# URL formatı: open.spotify.com/track/... (opsiyonel intl prefix ve query params)
+SPOTIFY_TRACK_URL_REGEX = re.compile(
+    r"(?:https?:\/\/)?(?:open\.)?spotify\.com\/(?:intl-[a-zA-Z0-9-]+\/)?(track)\/([a-zA-Z0-9]+)(?:\?[^\s]*)?"
+)
+
+# URI formatı: spotify:track:...
+SPOTIFY_TRACK_URI_REGEX = re.compile(
+    r"spotify:(track):([a-zA-Z0-9]+)"
+)
+
+# Genişletilmiş regex (album, playlist, artist desteği için)
 SPOTIFY_URL_REGEX = re.compile(
-    r"(?:https?:\/\/)?(?:open\.)?spotify\.com\/(?:intl-[a-zA-Z0-9-]+\/)?(track|album|playlist|artist)\/([a-zA-Z0-9]+)(?:\?[^\s]+)?"
+    r"(?:https?:\/\/)?(?:open\.)?spotify\.com\/(?:intl-[a-zA-Z0-9-]+\/)?(track|album|playlist|artist)\/([a-zA-Z0-9]+)(?:\?[^\s]*)?"
 )
 SPOTIFY_URI_REGEX = re.compile(
     r"spotify:(track|album|playlist|artist):([a-zA-Z0-9]+)"
 )
 
-# ── Spotipy İstemcisi Başlatma ────────────────────────────────
-_sp_client: Optional[object] = None
-
-def _get_spotipy_client():
-    """Spotipy istemcisini yapılandırır ve döndürür."""
-    global _sp_client
-    if not HAS_SPOTIPY:
-        return None
-    if _sp_client is not None:
-        return _sp_client
-
-    if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
-        try:
-            auth_manager = SpotifyClientCredentials(
-                client_id=SPOTIFY_CLIENT_ID,
-                client_secret=SPOTIFY_CLIENT_SECRET,
-            )
-            _sp_client = spotipy.Spotify(auth_manager=auth_manager)
-            logger.info("🎵 Spotify API (spotipy) başarıyla yetkilendirildi.")
-        except Exception as e:
-            logger.warning(f"Spotify yetkilendirme hatası: {e}")
-            _sp_client = None
-    return _sp_client
-
 
 def is_spotify_url(text: str) -> bool:
     """
     Metnin geçerli bir Spotify linki veya URI olup olmadığını kontrol eder.
+
+    Args:
+        text: Kontrol edilecek metin (kullanıcı mesajı)
+
+    Returns:
+        True → metin Spotify linki içeriyor
+        False → Spotify linki değil
+
+    Örnekler:
+        >>> is_spotify_url("https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT")
+        True
+        >>> is_spotify_url("Manga Cevapsız Sorular")
+        False
     """
     if not text:
         return False
     return bool(SPOTIFY_URL_REGEX.search(text) or SPOTIFY_URI_REGEX.search(text))
 
 
+def is_spotify_track_url(text: str) -> bool:
+    """
+    Metnin spesifik olarak bir Spotify ŞARKI (track) linki olup olmadığını kontrol eder.
+    Sadece track linklerini kabul eder (album, playlist, artist hariç).
+    """
+    if not text:
+        return False
+    return bool(SPOTIFY_TRACK_URL_REGEX.search(text) or SPOTIFY_TRACK_URI_REGEX.search(text))
+
+
 def parse_spotify_url(text: str) -> Optional[Tuple[str, str]]:
     """
     Spotify bağlantısından tür (track, album, playlist, artist) ve ID'yi çıkarır.
-    
+
+    Args:
+        text: Spotify linki veya URI'si
+
     Returns:
-        (item_type, item_id) veya None
+        (item_type, item_id) → Örn: ("track", "4cOdK2wGLETKBW3PvgPWqT")
+        veya None (eşleşme yoksa)
     """
     m = SPOTIFY_URL_REGEX.search(text)
     if m:
@@ -86,9 +144,80 @@ def parse_spotify_url(text: str) -> Optional[Tuple[str, str]]:
     return None
 
 
+# ══════════════════════════════════════════════════════════════
+# 3. METİN DÖNÜŞÜMÜ (Spotify → "Sanatçı - Şarkı Adı")
+# ══════════════════════════════════════════════════════════════
+# Spotify track ID'sinden şarkı adı ve ilk sanatçı adını çeker,
+# "Sanatçı Adı - Şarkı Adı" formatında döndürür.
+# Bu string doğrudan yt-dlp'nin ytsearch1: parametresiyle kullanılır.
+
+def get_track_info_from_spotify(track_id: str) -> Optional[str]:
+    """
+    Spotify track ID'sinden şarkı ve sanatçı bilgisini çeker.
+    Döndürdüğü format YouTube aramasına hazır şekildedir.
+
+    Args:
+        track_id: Spotify Track ID (Örn: "4cOdK2wGLETKBW3PvgPWqT")
+
+    Returns:
+        "Sanatçı Adı - Şarkı Adı" formatında string
+        Örn: "Manga - Cevapsız Sorular"
+        veya None (hata durumunda)
+    """
+    sp = _get_spotipy_client()
+    if not sp:
+        logger.error("Spotify istemcisi oluşturulamadı, track bilgisi çekilemiyor.")
+        return None
+
+    try:
+        track = sp.track(track_id)
+        if not track:
+            return None
+
+        # Şarkı adını al
+        song_name = track.get("name", "")
+
+        # İlk sanatçının adını al
+        artists = track.get("artists", [])
+        if artists:
+            artist_name = artists[0].get("name", "")
+        else:
+            artist_name = ""
+
+        # "Sanatçı Adı - Şarkı Adı" formatında döndür
+        if artist_name and song_name:
+            result = f"{artist_name} - {song_name}"
+            logger.info(f"🟢 Spotify → YouTube dönüşümü: {result}")
+            return result
+        elif song_name:
+            return song_name
+        else:
+            return None
+
+    except Exception as e:
+        logger.error(f"Spotify track bilgisi çekme hatası: {e}")
+        return None
+
+
+async def get_track_info_async(track_id: str) -> Optional[str]:
+    """
+    get_track_info_from_spotify'nin async sarmalayıcısı.
+    Spotipy senkron çalıştığı için executor'da çalıştırır,
+    böylece event loop bloklanmaz.
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, get_track_info_from_spotify, track_id)
+
+
+# ══════════════════════════════════════════════════════════════
+# FALLBACK: oEmbed ile Başlık Çekme
+# ══════════════════════════════════════════════════════════════
+# Spotify API anahtarı geçersizse veya hata olursa bu yöntem
+# devreye girer. API gerektirmez ama sadece track başlığını verir.
+
 async def _fetch_spotify_oembed(url: str) -> Optional[str]:
     """
-    Spotify API anahtarı olmadan tekli şarkı başlığını oEmbed API ile çeker (Fallback).
+    Spotify oEmbed API ile şarkı başlığını çeker (API anahtarsız fallback).
     """
     oembed_url = f"https://open.spotify.com/oembed?url={url}"
     try:
@@ -105,36 +234,26 @@ async def _fetch_spotify_oembed(url: str) -> Optional[str]:
     return None
 
 
-async def _fetch_spotify_html_meta(url: str) -> Optional[str]:
-    """
-    Spotify sayfasından OpenGraph meta etiketlerini okuyarak başlık çeker (İkinci Fallback).
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    }
-    try:
-        conn = aiohttp.TCPConnector(ssl=_SSL_CTX)
-        async with aiohttp.ClientSession(connector=conn, headers=headers) as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-                if resp.status == 200:
-                    html = await resp.text()
-                    m = re.search(r'<meta\s+property=["\']og:title["\']\s+content=["\']([^"\']+)["\']', html)
-                    if m:
-                        return m.group(1)
-    except Exception as e:
-        logger.debug(f"Spotify HTML meta çekme hatası: {e}")
-    return None
-
+# ══════════════════════════════════════════════════════════════
+# ANA FONKSİYON: Spotify Linkinden YouTube Arama Sorgusu Üret
+# ══════════════════════════════════════════════════════════════
 
 async def get_spotify_tracks(query: str) -> List[str]:
     """
     Spotify bağlantısını çözümler ve YouTube'da aranacak şarkı listesini döndürür.
 
+    Akış:
+    1. Regex ile link türü (track/album/playlist) ve ID ayrıştırılır
+    2. Spotipy API ile şarkı/sanatçı bilgisi çekilir
+    3. "Sanatçı Adı - Şarkı Adı" formatında liste döndürülür
+    4. API başarısızsa oEmbed fallback devreye girer
+
     Args:
         query: Spotify linki veya URI'si
 
     Returns:
-        YouTube arama sorguları listesi (Örn: ["Rick Astley - Never Gonna Give You Up"])
+        YouTube arama sorguları listesi
+        Örn: ["Manga - Cevapsız Sorular"]
     """
     parsed = parse_spotify_url(query)
     if not parsed:
@@ -144,35 +263,44 @@ async def get_spotify_tracks(query: str) -> List[str]:
     sp = _get_spotipy_client()
     tracks: List[str] = []
 
-    # 1. Spotipy ile resmi API üzerinden çekmeyi dene
+    # ── Spotipy ile API'den veri çek ──────────────────────────
     if sp:
         def _fetch_from_api():
             results = []
             try:
                 if item_type == "track":
+                    # Tekli şarkı: "Sanatçı - Şarkı Adı"
                     t = sp.track(item_id)
-                    artists = ", ".join(a["name"] for a in t.get("artists", []))
-                    results.append(f"{artists} - {t.get('name', '')}")
+                    artist_name = t["artists"][0]["name"] if t.get("artists") else ""
+                    song_name = t.get("name", "")
+                    if artist_name and song_name:
+                        results.append(f"{artist_name} - {song_name}")
 
                 elif item_type == "album":
+                    # Albümdeki tüm şarkılar
                     album = sp.album(item_id)
                     for item in album.get("tracks", {}).get("items", []):
-                        artists = ", ".join(a["name"] for a in item.get("artists", []))
-                        results.append(f"{artists} - {item.get('name', '')}")
+                        artist_name = item["artists"][0]["name"] if item.get("artists") else ""
+                        song_name = item.get("name", "")
+                        if artist_name and song_name:
+                            results.append(f"{artist_name} - {song_name}")
 
                 elif item_type == "playlist":
+                    # Çalma listesindeki tüm şarkılar
                     pl = sp.playlist(item_id)
                     for item in pl.get("tracks", {}).get("items", []):
                         t = item.get("track")
                         if t and t.get("name"):
-                            artists = ", ".join(a["name"] for a in t.get("artists", []))
-                            results.append(f"{artists} - {t.get('name', '')}")
+                            artist_name = t["artists"][0]["name"] if t.get("artists") else ""
+                            results.append(f"{artist_name} - {t['name']}")
 
                 elif item_type == "artist":
+                    # Sanatçının en popüler şarkıları
                     top = sp.artist_top_tracks(item_id)
                     for t in top.get("tracks", []):
-                        artists = ", ".join(a["name"] for a in t.get("artists", []))
-                        results.append(f"{artists} - {t.get('name', '')}")
+                        artist_name = t["artists"][0]["name"] if t.get("artists") else ""
+                        results.append(f"{artist_name} - {t.get('name', '')}")
+
             except Exception as e:
                 logger.error(f"Spotipy veri çekme hatası: {e}")
             return results
@@ -183,17 +311,11 @@ async def get_spotify_tracks(query: str) -> List[str]:
         except Exception as e:
             logger.error(f"Spotipy executor hatası: {e}")
 
-    # 2. Eğer API anahtarı yoksa veya API başarısız olduysa fallback yöntemlerini dene
+    # ── Fallback: oEmbed ile başlık çek ───────────────────────
     if not tracks:
-        logger.info(f"Spotify API anahtarı yok/boş, fallback deneniyor: {query}")
+        logger.info(f"Spotify API başarısız, oEmbed fallback deneniyor: {query}")
         clean_url = f"https://open.spotify.com/{item_type}/{item_id}"
-        
-        # oEmbed dene
         title = await _fetch_spotify_oembed(clean_url)
-        if not title:
-            # HTML metadata dene
-            title = await _fetch_spotify_html_meta(clean_url)
-
         if title:
             tracks.append(title)
 

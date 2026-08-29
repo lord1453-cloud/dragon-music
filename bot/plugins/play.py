@@ -200,12 +200,29 @@ async def stream_closed_handler(client: PyTgCalls, chat_id: int):
     await queue.clear(chat_id)
 
 
-# ── Ana Oynatma ve Arama Fonksiyonu ───────────────────────────
+# ══════════════════════════════════════════════════════════════
+# ANA OYNATMA MOTORU (If/Else Spotify → YouTube Akışı)
+# ══════════════════════════════════════════════════════════════
+# Bu fonksiyon kullanıcıdan gelen isteği yakalar ve şu kontrol
+# bloğunu uygular:
+#
+#   if → Spotify linki ise:
+#        1. Regex ile tür ve ID çıkar
+#        2. Spotipy ile "Sanatçı - Şarkı Adı" al
+#        3. "ytsearch1:Sanatçı - Şarkı Adı" olarak yt-dlp'ye gönder
+#
+#   else → Spotify linki değilse:
+#        Normal metin araması veya YouTube linki olarak işle
 
 async def _process_play(client: Client, message: Message, is_video: bool = False):
     """
     /oynat ve /voynat komutlarının ortak motoru.
-    Spotify linklerini, YouTube linklerini ve metin aramalarını işler.
+
+    OYNATMA MANTIĞI (IF/ELSE):
+    ─────────────────────────
+    • Spotify linki → Spotipy API → "Sanatçı - Şarkı" → ytsearch1: → yt-dlp
+    • YouTube linki → Doğrudan yt-dlp
+    • Metin araması → ytsearch1:metin → yt-dlp
     """
     cmd_name = "/voynat" if is_video else "/oynat"
     if len(message.command) < 2:
@@ -219,74 +236,104 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
 
     status_msg = await message.reply_text(msg_searching(raw_query, is_video=is_video))
 
-    # ── 1. Spotify Link Kontrolü ve Çözümleme ────────────────
-    spotify_search_list = []
+    # ══════════════════════════════════════════════════════════
+    # IF/ELSE KONTROL BLOĞU: Spotify mı, değil mi?
+    # ══════════════════════════════════════════════════════════
+
     if is_spotify_url(raw_query):
+        # ── SPOTIFY LİNKİ ALGILANDI ──────────────────────────
+        # 1. Spotify API ile şarkı/sanatçı bilgilerini çek
+        # 2. "Sanatçı Adı - Şarkı Adı" formatına dönüştür
+        # 3. Bu metni YouTube'da arat (ytsearch1: ile)
+        logger.info(f"🟢 Spotify linki algılandı: {raw_query}")
+
         spotify_search_list = await get_spotify_tracks(raw_query)
         if not spotify_search_list:
-            await status_msg.edit_text(msg_error("Spotify linki çözümlenemedi veya liste boş!"))
+            await status_msg.edit_text(msg_error("Spotify linki çözümlenemedi veya şarkı bulunamadı!"))
             return
 
-    # Eğer birden fazla şarkı içeren bir Spotify çalma listesi/albüm ise:
-    if len(spotify_search_list) > 1:
-        await status_msg.edit_text(msg_spotify_importing(len(spotify_search_list)))
+        # ── Çoklu şarkı (Album / Playlist) ────────────────────
+        if len(spotify_search_list) > 1:
+            await status_msg.edit_text(msg_spotify_importing(len(spotify_search_list)))
 
-        added_count = 0
-        first_track = None
+            first_track = None
 
-        for item_query in spotify_search_list:
-            yt_res = await search_youtube(item_query)
-            if not yt_res:
-                continue
+            for artist_song in spotify_search_list:
+                # Her şarkı için "ytsearch1:Sanatçı - Şarkı" olarak YouTube'da ara
+                logger.info(f"🟢 Spotify → YouTube araması: ytsearch1:{artist_song}")
+                yt_res = await search_youtube(artist_song)
+                if not yt_res:
+                    logger.warning(f"YouTube'da bulunamadı: {artist_song}")
+                    continue
 
-            track_info = {
-                "title": yt_res["title"],
-                "url": yt_res["url"],
-                "duration": yt_res["duration"],
-                "duration_str": yt_res["duration_str"],
-                "stream_type": "video" if is_video else "audio",
-                "requester": requester,
-            }
+                track_info = {
+                    "title": yt_res["title"],
+                    "url": yt_res["url"],
+                    "duration": yt_res["duration"],
+                    "duration_str": yt_res["duration_str"],
+                    "stream_type": "video" if is_video else "audio",
+                    "requester": requester,
+                }
 
-            is_playing = await queue.has_current(chat_id)
-            if not is_playing and first_track is None:
-                first_track = track_info
-                await queue.set_current(chat_id, track_info)
-            else:
-                await queue.add(chat_id, track_info)
-                added_count += 1
-
-        # İlk parçayı başlat
-        if first_track:
-            try:
-                if is_video:
-                    file_path = await get_video_file_for_stream(first_track["url"])
+                is_playing = await queue.has_current(chat_id)
+                if not is_playing and first_track is None:
+                    first_track = track_info
+                    await queue.set_current(chat_id, track_info)
                 else:
-                    file_path = await get_audio_file_for_stream(first_track["url"])
+                    await queue.add(chat_id, track_info)
 
-                if not file_path:
-                    await status_msg.edit_text(msg_error("İlk parçanın medya dosyası indirilemedi."))
-                    await queue.clear(chat_id)
-                    return
-
-                stream_obj = make_stream(file_path, is_video=is_video)
+            # İlk parçayı başlat
+            if first_track:
                 try:
-                    await call_client.join_group_call(chat_id, stream_obj)
-                except Exception:
-                    await call_client.change_stream(chat_id, stream_obj)
+                    if is_video:
+                        file_path = await get_video_file_for_stream(first_track["url"])
+                    else:
+                        file_path = await get_audio_file_for_stream(first_track["url"])
 
-                await status_msg.edit_text(
-                    msg_playing(first_track["title"], first_track.get("duration_str", ""), is_video=is_video)
-                )
-                await _prefetch_next(chat_id)
-            except Exception as e:
-                logger.error(f"Spotify oynatma hatası: {e}")
-                await status_msg.edit_text(msg_error(str(e)))
-                await queue.clear(chat_id)
-        return
+                    if not file_path:
+                        await status_msg.edit_text(msg_error("İlk parçanın dosyası indirilemedi."))
+                        await queue.clear(chat_id)
+                        return
 
-    # ── 2. Tekli Parça / YouTube Araması ──────────────────────
-    search_query = spotify_search_list[0] if len(spotify_search_list) == 1 else raw_query
+                    stream_obj = make_stream(file_path, is_video=is_video)
+                    try:
+                        await call_client.join_group_call(chat_id, stream_obj)
+                    except Exception:
+                        await call_client.change_stream(chat_id, stream_obj)
+
+                    await status_msg.edit_text(
+                        msg_playing(first_track["title"], first_track.get("duration_str", ""), is_video=is_video)
+                    )
+                    await _prefetch_next(chat_id)
+                except Exception as e:
+                    logger.error(f"Spotify çoklu oynatma hatası: {e}")
+                    await status_msg.edit_text(msg_error(str(e)))
+                    await queue.clear(chat_id)
+            return
+
+        # ── Tekli Spotify şarkısı ─────────────────────────────
+        # spotify_search_list[0] = "Sanatçı Adı - Şarkı Adı" (Örn: "Manga - Cevapsız Sorular")
+        # Bunu ytsearch1: ile YouTube'da aratıyoruz
+        artist_song_text = spotify_search_list[0]
+        logger.info(f"🟢 Spotify tekli şarkı → YouTube araması: ytsearch1:{artist_song_text}")
+
+        # search_youtube fonksiyonu zaten "ytsearch1:" prefix'ini eklediği için
+        # sadece "Sanatçı - Şarkı" metnini gönderiyoruz
+        search_query = artist_song_text
+
+    else:
+        # ── SPOTIFY LİNKİ DEĞİL (Normal Akış) ────────────────
+        # Düz metin araması veya YouTube linki olarak devam et
+        search_query = raw_query
+
+    # ══════════════════════════════════════════════════════════
+    # YOUTUBE ARAMA VE OYNATMA (Her iki dal da buraya gelir)
+    # ══════════════════════════════════════════════════════════
+    # search_query değişkeni:
+    #   - Spotify'dan geldiyse: "Manga - Cevapsız Sorular" (API'den çekilmiş)
+    #   - Normal geldiyse: Kullanıcının yazdığı metin veya YouTube linki
+    #
+    # search_youtube() fonksiyonu dahili olarak ytsearch1: prefix'ini ekler
 
     result = await search_youtube(search_query)
     if not result:
@@ -305,15 +352,18 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
     is_playing = await queue.has_current(chat_id)
 
     if is_playing:
+        # Zaten bir şey çalıyorsa → kuyruğa ekle
         position = await queue.add(chat_id, track)
         await status_msg.edit_text(msg_queued(track["title"], position, is_video=is_video))
 
+        # Sıradaki ilk parçayı arka planda indir
         if position == 1:
             if is_video:
                 asyncio.create_task(get_video_file_for_stream(track["url"]))
             else:
                 asyncio.create_task(get_audio_file_for_stream(track["url"]))
     else:
+        # Hiçbir şey çalmıyorsa → doğrudan çalmaya başla
         await queue.set_current(chat_id, track)
 
         try:
@@ -328,6 +378,7 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
                 await queue.clear(chat_id)
                 return
 
+            # Dosya boyutu kontrolü (bozuk dosya tespiti)
             if os.path.getsize(file_path) < 10000:
                 try:
                     os.remove(file_path)
@@ -342,9 +393,10 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
                     await queue.clear(chat_id)
                     return
 
-            # Akış nesnesi oluştur
+            # Akış nesnesi oluştur (Ses veya Video)
             stream_obj = make_stream(file_path, is_video=is_video)
 
+            # Sesli sohbete katıl veya akışı değiştir
             try:
                 await call_client.join_group_call(chat_id, stream_obj)
             except Exception:
