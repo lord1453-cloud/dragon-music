@@ -1,16 +1,15 @@
 # ============================================
 # 🐲 Ejderha Müzik Botu - YouTube Yardımcıları
 # ============================================
-# yt-dlp kullanarak YouTube'dan arama, ses akışı
-# URL'si çekme ve MP3 indirme fonksiyonları.
+# yt-dlp kullanarak YouTube'dan arama, ses/video akışı
+# indirme, cookies desteği ve MP3 indirme fonksiyonları.
 #
-# OPTİMİZASYON v2 - TAKILMA DÜZELTME:
-# - Stream dosyaları OGG/Opus formatında indirilir (PyTgCalls native)
-#   MP3 decode overhead'ı ortadan kalkar
-# - yt-dlp concurrent fragment + hızlı timeout
-# - Dosya bütünlüğü kontrolü (bozuk dosya tespiti)
-# - Cache sistemi ile tekrar indirme önlenir
-# - Ayrılmış ThreadPoolExecutor ile event loop korunur
+# ÖZELLİKLER & GÜNCELLEMELER:
+# - YouTube 403 / "Sign in to confirm you're not a bot" için cookies.txt entegrasyonu
+# - Görüntülü yayın için max 720p MP4 video akış profili
+# - ytsearch1: ile Spotify ve metin aramaları
+# - Takılmasız Opus/OGG ses ve MP4 video desteği
+# - Ayrılmış ThreadPoolExecutor ile event loop optimizasyonu
 
 import os
 import asyncio
@@ -20,33 +19,52 @@ from concurrent.futures import ThreadPoolExecutor
 
 import yt_dlp
 
-from bot.config import AUDIO_BITRATE, DOWNLOADS_DIR
+from bot.config import AUDIO_BITRATE, DOWNLOADS_DIR, COOKIES_FILE
 
 logger = logging.getLogger(__name__)
 
 # ── Ayrılmış Thread Pool ──────────────────────────────────────
-# yt-dlp indirme işlemleri için ayrı bir thread pool kullanılır.
-# Bu sayede event loop'un bloklanması önlenir ve eş zamanlı
-# indirme sayısı kontrol altında tutulur.
 _executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="ytdl")
-
-# ── yt-dlp Temel Ayarları ─────────────────────────────────────
-_BASE_OPTS = {
-    "quiet": True,
-    "no_warnings": True,
-    "noplaylist": True,
-    "geo_bypass": True,
-    "source_address": "0.0.0.0",
-    # Hızlı indirme için eş zamanlı fragment sayısı
-    "concurrent_fragment_downloads": 4,
-    # Bağlantı zaman aşımı (saniye) - uzun beklemeleri önler
-    "socket_timeout": 15,
-    # Yeniden deneme sayısı
-    "retries": 3,
-}
 
 # Minimum geçerli dosya boyutu (byte) - bundan küçükse bozuk kabul edilir
 MIN_VALID_FILE_SIZE = 10_000  # 10 KB
+
+
+def _get_base_opts() -> dict:
+    """
+    yt-dlp için temel ayarları ve cookies konfigürasyonunu hazırlar.
+    YouTube bot engeli (403 Forbidden) aşma parametrelerini içerir.
+    """
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "geo_bypass": True,
+        "source_address": "0.0.0.0",
+        "concurrent_fragment_downloads": 4,
+        "socket_timeout": 15,
+        "retries": 3,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web", "mweb"],
+            }
+        },
+    }
+
+    # Eğer cookies.txt mevcutsa yt-dlp'ye dahil et (403 Bot Engelini Aşan Kritik Ayar)
+    if COOKIES_FILE and os.path.exists(COOKIES_FILE):
+        opts["cookiefile"] = COOKIES_FILE
+        logger.info(f"🍪 yt-dlp cookies.txt dosyası aktif: {COOKIES_FILE}")
+
+    return opts
 
 
 def _format_duration(seconds: int) -> str:
@@ -68,6 +86,7 @@ def _is_valid_file(path: str) -> bool:
 async def search_youtube(query: str) -> Optional[dict]:
     """
     YouTube'da şarkı arar ve ilk sonucun bilgilerini döndürür.
+    'ytsearch1:' arama desteği içerir.
 
     Args:
         query: Arama sorgusu veya doğrudan YouTube linki
@@ -77,20 +96,19 @@ async def search_youtube(query: str) -> Optional[dict]:
         veya None (sonuç bulunamazsa)
     """
     opts = {
-        **_BASE_OPTS,
+        **_get_base_opts(),
         "default_search": "ytsearch",
         "extract_flat": False,
         "format": "bestaudio/best",
-        # Sadece bilgi çekiyoruz, hızlı olsun
         "skip_download": True,
     }
 
     def _search():
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
-                # Eğer doğrudan link değilse, arama yap
+                # Eğer doğrudan URL değilse, ytsearch1: ile ara
                 if not query.startswith(("http://", "https://")):
-                    info = ydl.extract_info(f"ytsearch:{query}", download=False)
+                    info = ydl.extract_info(f"ytsearch1:{query}", download=False)
                     if not info or "entries" not in info or not info["entries"]:
                         return None
                     info = info["entries"][0]
@@ -108,10 +126,9 @@ async def search_youtube(query: str) -> Optional[dict]:
                     "thumbnail": info.get("thumbnail", ""),
                 }
         except Exception as e:
-            logger.error(f"YouTube arama hatası: {e}")
+            logger.error(f"YouTube arama hatası ({query}): {e}")
             return None
 
-    # Ayrılmış thread pool'da çalıştır (event loop bloklanmaz)
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(_executor, _search)
 
@@ -119,15 +136,9 @@ async def search_youtube(query: str) -> Optional[dict]:
 async def get_stream_url(url: str) -> Optional[str]:
     """
     Verilen YouTube URL'si için ses akışı URL'sini çeker.
-
-    Args:
-        url: YouTube video URL'si
-
-    Returns:
-        Ses akışı doğrudan URL'si veya None
     """
     opts = {
-        **_BASE_OPTS,
+        **_get_base_opts(),
         "format": "bestaudio/best",
     }
 
@@ -137,7 +148,6 @@ async def get_stream_url(url: str) -> Optional[str]:
                 info = ydl.extract_info(url, download=False)
                 if not info:
                     return None
-                # Doğrudan ses URL'sini al
                 return info.get("url")
         except Exception as e:
             logger.error(f"Stream URL çekme hatası: {e}")
@@ -150,27 +160,18 @@ async def get_stream_url(url: str) -> Optional[str]:
 async def download_audio(query: str) -> Optional[dict]:
     """
     Şarkıyı MP3 olarak indirir (kullanıcıya gönderilecek dosya için).
-
-    Args:
-        query: Arama sorgusu veya YouTube linki
-
-    Returns:
-        İndirilen dosya bilgileri: {title, file_path, duration, duration_str}
-        veya None (hata durumunda)
     """
-    # Önce şarkıyı bul
     info = await search_youtube(query)
     if not info:
         return None
 
-    # Güvenli dosya adı oluştur
     safe_title = "".join(c for c in info["title"] if c.isalnum() or c in " -_").strip()
     if not safe_title:
         safe_title = "ejderha_muzik"
     output_path = os.path.join(DOWNLOADS_DIR, f"{safe_title}.mp3")
 
     opts = {
-        **_BASE_OPTS,
+        **_get_base_opts(),
         "format": "bestaudio/best",
         "outtmpl": output_path.replace(".mp3", ".%(ext)s"),
         "postprocessors": [
@@ -186,7 +187,6 @@ async def download_audio(query: str) -> Optional[dict]:
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([info["url"]])
-            # İndirilen dosyanın yolunu ve boyutunu kontrol et
             if _is_valid_file(output_path):
                 return {
                     "title": info["title"],
@@ -205,37 +205,20 @@ async def download_audio(query: str) -> Optional[dict]:
 
 async def get_audio_file_for_stream(url: str) -> Optional[str]:
     """
-    Sesli sohbette çalmak için şarkıyı optimize edilmiş formatta indirir.
-    PyTgCalls AudioPiped için stabil ve akıcı dosya üretir.
-
-    TAKILMA ÇÖZÜMÜ:
-    - OGG/Opus formatı kullanılır (Telegram VC'nin native codec'i)
-      MP3 → PCM decode adımı atlanır, CPU yükü azalır
-    - 48kHz stereo çıkış (PyTgCalls standart)
-    - Dosya TAMAMEN indirilir, sonra çalma başlar
-    - Cache sistemi ile aynı şarkı tekrar indirilmez
-    - Bozuk dosya tespiti ve otomatik yeniden indirme
-
-    Args:
-        url: YouTube video URL'si
-
-    Returns:
-        İndirilen ses dosyasının yolu veya None
+    Sesli sohbette çalmak için şarkıyı optimize edilmiş OGG/Opus formatında indirir.
+    PyTgCalls ses akışı için en stabil çözümdür.
     """
-    # Her indirme için benzersiz dosya adı
     file_hash = hash(url) & 0xFFFFFFFF
     output_template = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.%(ext)s")
-    # OGG formatı - PyTgCalls native, decode overhead yok
     final_path = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.ogg")
-    # Fallback: MP3 formatı (OGG başarısız olursa)
     fallback_path = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.mp3")
 
-    # Cache kontrolü - zaten indirilmiş ve geçerli mi?
+    # Cache kontrolü
     if _is_valid_file(final_path):
-        logger.info(f"Cache'den kullanılıyor (ogg): {final_path}")
+        logger.info(f"Cache'den ses kullanılıyor (ogg): {final_path}")
         return final_path
     if _is_valid_file(fallback_path):
-        logger.info(f"Cache'den kullanılıyor (mp3): {fallback_path}")
+        logger.info(f"Cache'den ses kullanılıyor (mp3): {fallback_path}")
         return fallback_path
 
     # Bozuk cache dosyasını temizle
@@ -244,23 +227,20 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
             os.remove(p)
 
     opts = {
-        **_BASE_OPTS,
+        **_get_base_opts(),
         "format": "bestaudio/best",
         "outtmpl": output_template,
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
-                # Opus: YouTube native codec (48kHz)
-                # MP3/Vorbis re-encoding yapılmaz, indirme çok daha hızlı ve kayıpsız olur
                 "preferredcodec": "opus",
                 "preferredquality": "128",
             }
         ],
-        # FFmpeg post-processor argümanları
         "postprocessor_args": {
             "FFmpegExtractAudio": [
-                "-ac", "2",           # Stereo (PyTgCalls beklentisi)
-                "-ar", "48000",       # 48kHz sample rate (Telegram VC standart)
+                "-ac", "2",
+                "-ar", "48000",
             ],
         },
     }
@@ -270,27 +250,94 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([url])
 
-            # OGG dosyasını kontrol et
             if _is_valid_file(final_path):
-                logger.info(f"Stream dosyası indirildi (ogg): {final_path}")
+                logger.info(f"Ses stream dosyası hazır (ogg): {final_path}")
                 return final_path
 
-            # OGG bulunamazsa MP3 dene (fallback)
             if _is_valid_file(fallback_path):
-                logger.info(f"Stream dosyası indirildi (mp3 fallback): {fallback_path}")
+                logger.info(f"Ses stream dosyası hazır (mp3): {fallback_path}")
                 return fallback_path
 
-            # Hiçbiri bulunamadıysa, downloads klasöründe uygun dosya ara
             for ext in [".ogg", ".mp3", ".m4a", ".opus", ".webm"]:
                 candidate = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}{ext}")
                 if _is_valid_file(candidate):
-                    logger.info(f"Stream dosyası bulundu ({ext}): {candidate}")
                     return candidate
 
-            logger.error(f"Stream dosyası bulunamadı: stream_{file_hash}.*")
+            logger.error(f"Ses stream dosyası bulunamadı: stream_{file_hash}.*")
             return None
         except Exception as e:
-            logger.error(f"Stream dosyası indirme hatası: {e}")
+            logger.error(f"Ses stream indirme hatası: {e}")
+            return None
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_executor, _download)
+
+
+async def get_video_file_for_stream(url: str) -> Optional[str]:
+    """
+    Görüntülü yayın (Video Stream) için videoyu maksimum 720p MP4 formatında indirir.
+    PyTgCalls MediaStream video akışı için optimize edilmiştir.
+
+    Args:
+        url: YouTube video URL'si
+
+    Returns:
+        İndirilen MP4 video dosyasının yolu veya None
+    """
+    file_hash = hash(url) & 0xFFFFFFFF
+    output_template = os.path.join(DOWNLOADS_DIR, f"vstream_{file_hash}.%(ext)s")
+    final_path = os.path.join(DOWNLOADS_DIR, f"vstream_{file_hash}.mp4")
+
+    # Cache kontrolü
+    if _is_valid_file(final_path):
+        logger.info(f"Cache'den video kullanılıyor (mp4): {final_path}")
+        return final_path
+
+    # Bozuk cache dosyasını temizle
+    if os.path.exists(final_path):
+        try:
+            os.remove(final_path)
+        except Exception:
+            pass
+
+    # Maksimum 720p MP4 video ve ses profili
+    opts = {
+        **_get_base_opts(),
+        "format": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best",
+        "outtmpl": output_template,
+        "merge_output_format": "mp4",
+        "postprocessor_args": {
+            "FFmpegVideoConvertor": [
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "23",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-ar", "48000",
+            ],
+        },
+    }
+
+    def _download():
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.download([url])
+
+            if _is_valid_file(final_path):
+                logger.info(f"Video stream dosyası hazır (mp4 720p): {final_path}")
+                return final_path
+
+            # MP4 uzantılı diğer adayları tara
+            for ext in [".mp4", ".mkv", ".webm"]:
+                candidate = os.path.join(DOWNLOADS_DIR, f"vstream_{file_hash}{ext}")
+                if _is_valid_file(candidate):
+                    logger.info(f"Video stream adayı bulundu ({ext}): {candidate}")
+                    return candidate
+
+            logger.error(f"Video dosyası bulunamadı: vstream_{file_hash}.*")
+            return None
+        except Exception as e:
+            logger.error(f"Video indirme hatası: {e}")
             return None
 
     loop = asyncio.get_event_loop()
@@ -299,23 +346,27 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
 
 async def cleanup_old_streams(keep_path: Optional[str] = None):
     """
-    Eski stream dosyalarını arka planda temizler.
+    Eski ses ve video stream dosyalarını arka planda temizler.
     Bellek ve disk kullanımını düşük tutar.
     """
     import glob
 
     def _clean():
         try:
-            for f in glob.glob(os.path.join(DOWNLOADS_DIR, "stream_*")):
-                if keep_path and os.path.abspath(f) == os.path.abspath(keep_path):
-                    continue
-                try:
-                    os.remove(f)
-                except Exception:
-                    pass
+            # Hem stream_* (ses) hem vstream_* (video) dosyalarını temizle
+            patterns = [
+                os.path.join(DOWNLOADS_DIR, "stream_*"),
+                os.path.join(DOWNLOADS_DIR, "vstream_*"),
+            ]
+            for pattern in patterns:
+                for f in glob.glob(pattern):
+                    if keep_path and os.path.abspath(f) == os.path.abspath(keep_path):
+                        continue
+                    try:
+                        os.remove(f)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
     await asyncio.to_thread(_clean)
-
-

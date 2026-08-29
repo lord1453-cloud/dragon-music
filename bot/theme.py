@@ -13,6 +13,8 @@ DRAGON_FACE = "🐉"
 FIRE = "🔥"
 VOLCANO = "🌋"
 MUSIC = "🎵"
+VIDEO = "🎬"
+SPOTIFY = "🟢"
 SPARKLE = "✨"
 SWORD = "⚔️"
 CROWN = "👑"
@@ -29,7 +31,7 @@ QUEUE = "📋"
 
 # ── Karşılama Mesajı ─────────────────────────────────────────
 WELCOME_TEXT = f"""
-{DRAGON_FACE} **EJDERHA MÜZİK BOTU** {DRAGON_FACE}
+{DRAGON_FACE} **EJDERHA MÜZİK & VİDEO BOTU** {DRAGON_FACE}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
 {FIRE} *Ejderha uyanıyor... Kanatlarını açıyor...*
@@ -37,12 +39,12 @@ WELCOME_TEXT = f"""
 Hoş geldin, cesur savaşçı! {SWORD}
 
 Ben **Ejderha Müzik Botu**, sesli sohbetlerde
-müziğin ateşli nefesiyle çalan efsanevi
-bir yaratığım! {VOLCANO}
+müziğin ve videonun ateşli nefesiyle yayın yapan
+efsanevi bir yaratığım! {VOLCANO}
 
-{SPARKLE} Müzik ejderhanın nefesiyle çalar,
-{SPARKLE} Şarkılar ateşten doğar,
-{SPARKLE} Ritim kanatlarımda taşınır!
+{SPARKLE} Ses ve Görüntülü Yayın (720p HD)
+{SPARKLE} YouTube & Spotify Entegrasyonu
+{SPARKLE} Ritim ve Görsellik kanatlarımda taşınır!
 
 {GEM} Aşağıdaki butonlardan keşfetmeye başla:
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -53,26 +55,32 @@ COMMANDS_TEXT = f"""
 {SCROLL} **EJDERHA KOMUTLARI** {SCROLL}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-{FIRE} `/oynat` veya `/play <şarkı adı veya link>`
-↳ Ejderha müziği ateşler! Çalıyorsa sıraya ekler.
+{FIRE} `/oynat` veya `/play <şarkı adı / Spotify linki / YouTube linki>`
+↳ Ejderha müziği sesli sohbette ateşler! Çalıyorsa sıraya ekler.
+
+{VIDEO} `/voynat` veya `/vplay` veya `/video <video adı veya link>`
+↳ Ejderha görüntülü yayını (720p HD) başlatır!
+
+{SPOTIFY} **Spotify Link Desteği:**
+↳ Tekli şarkı, albüm veya çalma listesi linklerini `/oynat` ile atabilirsiniz.
 
 {PAUSE} `/duraklat` veya `/pause`
-↳ Ejderha nefesini tutar, müzik durur.
+↳ Ejderha nefesini tutar, yayın durur.
 
 {PLAY} `/devam` veya `/resume`
-↳ Ejderha tekrar kükreyerek çalmaya devam eder!
+↳ Ejderha tekrar kükreyerek yayına devam eder!
 
 {SKIP} `/gec` veya `/atla` veya `/skip`
-↳ Ejderha sıradaki şarkıya kanat çırpar.
+↳ Ejderha sıradaki parçaya/videoya kanat çırpar.
 
 🛑 `/bitir` veya `/dur` veya `/stop`
-↳ Müziği durdurur, kuyruğu temizler ve sohbetten ayrılır.
+↳ Yayını durdurur, kuyruğu temizler ve sohbetten ayrılır.
 
 🔀 `/karistir` veya `/shuffle`
 ↳ Kuyruktaki şarkıları rastgele karıştırır.
 
 🧹 `/temizle` veya `/clear`
-↳ Sıradaki tüm bekleyen şarkıları temizler.
+↳ Sıradaki tüm bekleyen parçaları temizler.
 
 {QUEUE} `/sira` veya `/queue`
 ↳ Ejderhanın müzik kuyruğunu gösterir.
@@ -112,19 +120,20 @@ SETTINGS_TEXT = f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
 {SHIELD} **Bot Bilgileri:**
-• Sürüm: `1.0.0`
-• Motor: `Pyrogram + PyTgCalls`
-• Ses Kalitesi: `320kbps`
-• Arama: `yt-dlp (YouTube)`
+• Sürüm: `1.1.0`
+• Motor: `Pyrogram + PyTgCalls v1.2.9`
+• Ses Kalitesi: `320kbps / Opus 48kHz`
+• Video Kalitesi: `720p HD MP4`
+• Servisler: `YouTube (Cookies) & Spotify`
 
 {DRAGON_FACE} **Ejderha Durumu:**
 • Durum: Uyanık ve hazır! {FIRE}
 • Dil: Türkçe 🇹🇷
 
 {GEM} **Teknolojiler:**
-• Python 3.11+
-• FFmpeg ses işleme
-• Asenkron mimari
+• Python 3.10+
+• FFmpeg ses/video işleme
+• Asenkron WebRTC mimari
 ━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
@@ -148,72 +157,87 @@ kodlanmıştır!
 
 # ── Durum Mesajları ───────────────────────────────────────────
 
-def msg_searching(query: str) -> str:
+def msg_searching(query: str, is_video: bool = False) -> str:
     """Arama yapılırken gösterilecek mesaj."""
-    return f"{DRAGON} **Ejderha arıyor...** {FIRE}\n\n{SCROLL} `{query}` için göklerde süzülüyor..."
+    media_type = "video" if is_video else "şarkı"
+    return f"{DRAGON} **Ejderha {media_type} arıyor...** {FIRE}\n\n{SCROLL} `{query}` için göklerde süzülüyor..."
 
-def msg_playing(title: str, duration: str = "") -> str:
-    """Şarkı çalmaya başladığında gösterilecek mesaj."""
+def msg_playing(title: str, duration: str = "", is_video: bool = False) -> str:
+    """Şarkı veya video çalmaya başladığında gösterilecek mesaj."""
     dur_text = f"\n{SPARKLE} Süre: `{duration}`" if duration else ""
+    icon = VIDEO if is_video else MUSIC
+    header = "Görüntülü Yayını Başlattı!" if is_video else "Müziği Ateşliyor!"
+    subtext = "Görüntü ve ses ejderhanın aleviyle aktarılıyor..." if is_video else "Müzik ejderhanın nefesiyle çalıyor..."
     return (
-        f"{DRAGON_FACE} **Ejderha Müziği Ateşliyor!** {FIRE}\n"
+        f"{DRAGON_FACE} **Ejderha {header}** {FIRE}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"{MUSIC} **{title}**{dur_text}\n\n"
-        f"{VOLCANO} *Müzik ejderhanın nefesiyle çalıyor...*"
+        f"{icon} **{title}**{dur_text}\n\n"
+        f"{VOLCANO} *{subtext}*"
     )
 
-def msg_queued(title: str, position: int) -> str:
-    """Şarkı kuyruğa eklendiğinde gösterilecek mesaj."""
+def msg_queued(title: str, position: int, is_video: bool = False) -> str:
+    """Şarkı veya video kuyruğa eklendiğinde gösterilecek mesaj."""
+    icon = VIDEO if is_video else MUSIC
     return (
         f"{DRAGON} **Kuyruğa Eklendi!** {SPARKLE}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"{MUSIC} **{title}**\n"
+        f"{icon} **{title}**\n"
         f"{SCROLL} Sıra: **#{position}**\n\n"
         f"{FIRE} *Ejderha sırasını bekliyor...*"
     )
 
+def msg_spotify_importing(count: int) -> str:
+    """Spotify listesi içe aktarılırken gösterilecek mesaj."""
+    return (
+        f"{SPOTIFY} **Spotify Listesi Algılandı!** {SPARKLE}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{MUSIC} Toplam **{count}** parça YouTube'da aranıp kuyruğa ekleniyor...\n\n"
+        f"{FIRE} *Ejderha listeyi hazırlıyor...*"
+    )
+
 def msg_paused() -> str:
     """Müzik duraklatıldığında gösterilecek mesaj."""
-    return f"{PAUSE} **Ejderha Nefesini Tuttu!** {DRAGON}\n\n*Müzik donduruldu... Devam etmek için /devam yazın.*"
+    return f"{PAUSE} **Ejderha Nefesini Tuttu!** {DRAGON}\n\n*Yayın donduruldu... Devam etmek için /devam yazın.*"
 
 def msg_resumed() -> str:
     """Müzik devam ettirildiğinde gösterilecek mesaj."""
-    return f"{PLAY} **Ejderha Tekrar Kükredi!** {FIRE}\n\n*Müzik kaldığı yerden devam ediyor...*"
+    return f"{PLAY} **Ejderha Tekrar Kükredi!** {FIRE}\n\n*Yayın kaldığı yerden devam ediyor...*"
 
-def msg_skipped(next_title: str = None) -> str:
+def msg_skipped(next_title: str = None, is_video: bool = False) -> str:
     """Şarkı atlandığında gösterilecek mesaj."""
+    icon = VIDEO if is_video else MUSIC
     if next_title:
         return (
             f"{SKIP} **Ejderha Kanat Çırptı!** {DRAGON}\n\n"
-            f"{MUSIC} Şimdi çalıyor: **{next_title}**"
+            f"{icon} Şimdi çalıyor: **{next_title}**"
         )
     return f"{SKIP} **Ejderha Kanat Çırptı!** {DRAGON}\n\n{SCROLL} Kuyruk boş! Ejderha uykuya dalıyor... 💤"
 
 def msg_stopped() -> str:
     """Müzik durdurulup çıkıldığında gösterilecek mesaj."""
-    return f"🛑 **Ejderha Müziği Sonlandırdı!** {DRAGON}\n\n*Sesli sohbetten ayrılındı ve kuyruk temizlendi.* 💤"
+    return f"🛑 **Ejderha Yayını Sonlandırdı!** {DRAGON}\n\n*Sesli sohbetten ayrılındı ve kuyruk temizlendi.* 💤"
 
 def msg_shuffled() -> str:
     """Kuyruk karıştırıldığında gösterilecek mesaj."""
-    return f"🔀 **Ejderha Kuyruğu Karıştırdı!** {DRAGON_FACE}\n\n*Bekleyen şarkılar rastgele harmanlandı!* {FIRE}"
+    return f"🔀 **Ejderha Kuyruğu Karıştırdı!** {DRAGON_FACE}\n\n*Bekleyen parçalar rastgele harmanlandı!* {FIRE}"
 
 def msg_queue_cleared() -> str:
     """Kuyruk temizlendiğinde gösterilecek mesaj."""
-    return f"🧹 **Ejderha Kuyruğu Temizledi!** {DRAGON}\n\n*Bekleyen tüm şarkılar silindi.*"
-
+    return f"🧹 **Ejderha Kuyruğu Temizledi!** {DRAGON}\n\n*Bekleyen tüm parçalar silindi.*"
 
 def msg_queue_empty() -> str:
     """Kuyruk boş olduğunda gösterilecek mesaj."""
-    return f"{QUEUE} **Kuyruk Boş!** {DRAGON}\n\n*Ejderhanın müzik listesi tükenmiş! /oynat ile yeni şarkı ekleyin.* {FIRE}"
+    return f"{QUEUE} **Kuyruk Boş!** {DRAGON}\n\n*Ejderhanın listesi tükenmiş! /oynat veya /voynat ile yeni parça ekleyin.* {FIRE}"
 
 def msg_queue_list(tracks: list, current_title: str = None) -> str:
     """Kuyruk listesini gösteren mesaj."""
-    text = f"{QUEUE} **Ejderhanın Müzik Kuyruğu** {DRAGON_FACE}\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    text = f"{QUEUE} **Ejderhanın Yayın Kuyruğu** {DRAGON_FACE}\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     if current_title:
         text += f"{FIRE} **Şu an çalıyor:** {current_title}\n\n"
     for i, track in enumerate(tracks, 1):
-        text += f"{SPARKLE} **{i}.** {track['title']}\n"
-    text += f"\n━━━━━━━━━━━━━━━━━━━━━━━━\n{SCROLL} Toplam: **{len(tracks)}** şarkı"
+        icon = VIDEO if track.get("stream_type") == "video" else MUSIC
+        text += f"{SPARKLE} **{i}.** {icon} {track['title']}\n"
+    text += f"\n━━━━━━━━━━━━━━━━━━━━━━━━\n{SCROLL} Toplam: **{len(tracks)}** parça"
     return text
 
 def msg_downloading(title: str) -> str:
@@ -241,11 +265,11 @@ def msg_error(detail: str = "") -> str:
 
 def msg_no_voice_chat() -> str:
     """Sesli sohbet bulunamadığında gösterilecek mesaj."""
-    return f"{VOLCANO} **Sesli Sohbet Bulunamadı!** {DRAGON}\n\n*Lütfen önce bir sesli sohbet başlatın.*"
+    return f"{VOLCANO} **Sesli Sohbet Bulunamadı!** {DRAGON}\n\n*Lütfen önce grupta sesli sohbeti başlatın.*"
 
 def msg_not_playing() -> str:
     """Hiçbir şey çalmıyorken gösterilecek mesaj."""
-    return f"{DRAGON} **Ejderha Sessiz!**\n\n*Şu an çalan bir şarkı yok. /oynat ile müziği başlatın!* {FIRE}"
+    return f"{DRAGON} **Ejderha Sessiz!**\n\n*Şu an çalan bir şey yok. /oynat veya /voynat ile yayını başlatın!* {FIRE}"
 
 def msg_usage(command: str, example: str) -> str:
     """Kullanım hatası mesajı."""
@@ -254,7 +278,6 @@ def msg_usage(command: str, example: str) -> str:
         f"Doğru kullanım: `{command}`\n"
         f"Örnek: `{example}`"
     )
-
 
 # ── Inline Keyboard Düzenleri ─────────────────────────────────
 

@@ -5,9 +5,12 @@ Telegram sesli sohbetlerinde çalışan, ejderha temalı, modüler ve yüksek pe
 ## ✨ Özellikler
 
 - 🎵 **Sesli Sohbette Müzik Çalma** - YouTube'dan arama yaparak sesli sohbette müzik çalar
+- 🎬 **Görüntülü Yayın (Video Stream)** - 720p HD MP4 video yayını desteği (`/voynat`, `/vplay`)
+- 🟢 **Spotify Desteği** - Spotify şarkı, albüm ve çalma listesi linklerini otomatik algılar ve YouTube üzerinden kuyruğa ekler
+- 🍪 **YouTube 403 / Bot Koruması** - `cookies.txt` entegrasyonu ile "Sign in to confirm you're not a bot" hatasını çözer
 - 📥 **Müzik İndirme** - Şarkıları MP3 (320kbps) olarak indirip Telegram'a gönderir
-- 📋 **Kuyruk Sistemi** - Birden fazla şarkıyı sıraya ekleyebilme
-- ⏸️ **Kontroller** - Duraklatma, devam ettirme, atlama
+- 📋 **Kuyruk Sistemi** - Birden fazla şarkı veya videoyu sıraya ekleyebilme
+- ⏸️ **Gelişmiş Kontroller** - Duraklatma, devam ettirme, atlama, karıştırma, temizleme
 - 🐲 **Ejderha Teması** - Fantastik dil ve ejderha emojileriyle benzersiz deneyim
 - 🎛️ **Inline Menü** - Butonlarla gezinilebilir detaylı menü sistemi
 
@@ -16,12 +19,17 @@ Telegram sesli sohbetlerinde çalışan, ejderha temalı, modüler ve yüksek pe
 | Komut | Açıklama |
 |-------|----------|
 | `/start` veya `/menu` | Ejderha temalı karşılama menüsünü açar |
-| `/oynat <şarkı adı veya link>` | Şarkıyı çalar veya sıraya ekler |
-| `/duraklat` | Müziği duraklatır |
-| `/devam` | Müziği devam ettirir |
-| `/gec` | Sıradaki şarkıya geçer |
-| `/sira` | Müzik kuyruğunu listeler |
+| `/oynat <şarkı adı / Spotify / YouTube>` | Şarkıyı ses olarak çalar veya sıraya ekler |
+| `/voynat <video adı veya link>` | 720p HD görüntülü yayın başlatır veya sıraya ekler |
+| `/duraklat` | Yayını duraklatır |
+| `/devam` | Yayını devam ettirir |
+| `/gec` | Sıradaki şarkıya/videoya geçer |
+| `/karistir` | Kuyruktaki bekleyen şarkıları karıştırır |
+| `/temizle` | Bekleyen kuyruğu temizler |
+| `/bitir` | Yayını durdurur, kuyruğu temizler ve ayrılır |
+| `/sira` | Müzik/video kuyruğunu listeler |
 | `/indir <şarkı adı veya link>` | Şarkıyı MP3 olarak indirir ve gönderir |
+
 
 ## 🔧 Gereksinimler
 

@@ -6,6 +6,7 @@
 
 import os
 import sys
+from typing import Optional
 from dotenv import load_dotenv
 
 # .env dosyasını yükle
@@ -32,10 +33,29 @@ SESSION_STRING: str = _get_required("SESSION_STRING")
 AUDIO_BITRATE: int = int(os.getenv("AUDIO_BITRATE", "320"))
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
+# YouTube Cookies Yapılandırması (Bot engeli / 403 aşmak için)
+_cookies_env_path = os.getenv("COOKIES_FILE_PATH", "cookies.txt")
+_base_dir = os.path.dirname(os.path.dirname(__file__))
+_possible_cookie_paths = [
+    _cookies_env_path,
+    os.path.join(_base_dir, _cookies_env_path),
+    os.path.join(_base_dir, "cookies.txt"),
+]
+COOKIES_FILE: Optional[str] = None
+for cp in _possible_cookie_paths:
+    if os.path.exists(cp) and os.path.isfile(cp):
+        COOKIES_FILE = os.path.abspath(cp)
+        break
+
+# Spotify API Yapılandırması
+SPOTIFY_CLIENT_ID: Optional[str] = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET: Optional[str] = os.getenv("SPOTIFY_CLIENT_SECRET")
+
 # ── Sabit Değerler ───────────────────────────────────────────
 BOT_NAME: str = "🐲 Ejderha Müzik Botu"
-BOT_VERSION: str = "1.0.0"
-DOWNLOADS_DIR: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "downloads")
+BOT_VERSION: str = "1.1.0"
+DOWNLOADS_DIR: str = os.path.join(_base_dir, "downloads")
 
 # İndirme klasörünü oluştur
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+
