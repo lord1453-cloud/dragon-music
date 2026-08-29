@@ -5,7 +5,11 @@
 # instance'larını oluşturur ve dışa açar.
 
 from pyrogram import Client
-from pytgcalls import PyTgCalls
+
+try:
+    from pytgcalls import PyTgCalls  # type: ignore
+except Exception:
+    PyTgCalls = None  # type: ignore
 
 from bot.config import BOT_TOKEN, API_ID, API_HASH, SESSION_STRING
 
@@ -35,4 +39,4 @@ user_client = Client(
 # ── PyTgCalls İstemcisi ──────────────────────────────────────
 # Sesli sohbetlerde ses akışını yöneten istemci.
 # Userbot client üzerinden çalışır.
-call_client = PyTgCalls(user_client)
+call_client = PyTgCalls(user_client) if PyTgCalls is not None else None  # type: ignore

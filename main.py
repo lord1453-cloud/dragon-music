@@ -10,9 +10,12 @@ import asyncio
 import signal
 import sys
 import glob
-import os
-
-from pytgcalls import idle
+try:
+    from pytgcalls import idle  # type: ignore
+except Exception:
+    async def idle():  # type: ignore
+        while True:
+            await asyncio.sleep(3600)
 
 from bot.config import BOT_NAME, BOT_VERSION, LOG_LEVEL, DOWNLOADS_DIR
 from bot.clients import bot_client, user_client, call_client
@@ -68,12 +71,13 @@ async def main():
         raise
 
     # PyTgCalls'u başlat
-    try:
-        await call_client.start()
-        logger.info("🌋 PyTgCalls başlatıldı - Sesli sohbet hazır!")
-    except Exception as e:
-        logger.error(f"❌ PyTgCalls başlatılamadı: {e}")
-        raise
+    if call_client:
+        try:
+            await call_client.start()
+            logger.info("🌋 PyTgCalls başlatıldı - Sesli sohbet hazır!")
+        except Exception as e:
+            logger.error(f"❌ PyTgCalls başlatılamadı: {e}")
+            raise
 
     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     logger.info(f"✨ {BOT_NAME} tamamen hazır! Ejderha uçuşa geçti!")

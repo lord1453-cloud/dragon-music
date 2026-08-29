@@ -16,8 +16,15 @@ import asyncio
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pytgcalls import PyTgCalls
-from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, Update
+try:
+    from pytgcalls import PyTgCalls  # type: ignore
+    from pytgcalls.types import MediaStream, AudioQuality, VideoQuality, Update  # type: ignore
+except Exception:
+    PyTgCalls = None  # type: ignore
+    MediaStream = None  # type: ignore
+    AudioQuality = None  # type: ignore
+    VideoQuality = None  # type: ignore
+    Update = None  # type: ignore
 
 from bot.clients import bot_client, call_client
 from bot.theme import (
