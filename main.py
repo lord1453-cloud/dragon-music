@@ -17,7 +17,14 @@ from datetime import datetime
 
 from bot.config import BOT_NAME, BOT_VERSION, LOG_LEVEL, DOWNLOADS_DIR, LOG_GROUP_ID
 
-# ── 1. Loglama Ayarları ──────────────────────────────────────
+# ── 1. Windows Console UTF-8 Desteği & Loglama Ayarları ─────
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s.%(msecs)03d | %(levelname)-8s | %(name)-22s | %(message)s",
