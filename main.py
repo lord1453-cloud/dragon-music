@@ -86,8 +86,19 @@ async def start_services():
         bot_info = await bot_client.get_me()
         logger.info(f"✅ Bot bağlandı: @{bot_info.username} [ID: {bot_info.id}]")
     except Exception as e:
-        logger.critical(f"❌ Bot istemcisi başlatılamadı: {e}", exc_info=True)
-        raise
+        from pyrogram.errors import FloodWait
+        if isinstance(e, FloodWait):
+            logger.warning(
+                f"⏳ Telegram FloodWait: Telegram sunucusu çok fazla ardışık oturum açma nedeniyle "
+                f"{e.value} saniye bekleme istedi. {e.value} saniye bekleniyor..."
+            )
+            await asyncio.sleep(e.value + 2)
+            await bot_client.start()
+            bot_info = await bot_client.get_me()
+            logger.info(f"✅ Bot bağlandı: @{bot_info.username} [ID: {bot_info.id}]")
+        else:
+            logger.critical(f"❌ Bot istemcisi başlatılamadı: {e}", exc_info=True)
+            raise
 
     # 2. Userbot İstemcisini Başlat (Session String)
     try:
