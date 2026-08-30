@@ -41,22 +41,12 @@ def _get_base_opts() -> dict:
         "no_warnings": True,
         "noplaylist": True,
         "geo_bypass": True,
-        "source_address": "0.0.0.0",
         "concurrent_fragment_downloads": 4,
         "socket_timeout": 20,
         "retries": 5,
-        "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
-                "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-                "Version/17.4 Mobile/15E148 Safari/604.1"
-            ),
-            "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        },
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "android", "web_creator", "mweb"],
-                "player_skip": ["configs", "webpage"],
+                "player_client": ["android", "mweb", "web", "ios"],
             }
         },
     }
@@ -89,67 +79,88 @@ async def search_youtube(query: str) -> Optional[dict]:
     """
     YouTube'da şarkı arar ve ilk sonucun bilgilerini döndürür.
     'ytsearch1:' arama desteği içerir.
-
-    Args:
-        query: Arama sorgusu veya doğrudan YouTube linki
-
-    Returns:
-        Şarkı bilgileri dict'i: {title, url, duration, duration_str, thumbnail}
-        veya None (sonuç bulunamazsa)
     """
     opts = {
         **_get_base_opts(),
-        "default_search": "ytsearch",
-        "extract_flat": False,
-        "format": "bestaudio/best",
+        "extract_flat": "in_playlist",
         "skip_download": True,
     }
 
     def _search():
-        # İlk deneme: Öncelikli mobil istemciler
+        target = query if query.startswith(("http://", "https://")) else f"ytsearch1:{query}"
+
+        # 1. Öncelikli arama
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
-                target = query if query.startswith(("http://", "https://")) else f"ytsearch1:{query}"
                 info = ydl.extract_info(target, download=False)
-                if info and "entries" in info and info["entries"]:
-                    info = info["entries"][0]
                 if info:
-                    return {
-                        "title": info.get("title", "Bilinmeyen Şarkı"),
-                        "url": info.get("webpage_url", query),
-                        "duration": info.get("duration", 0),
-                        "duration_str": _format_duration(info.get("duration", 0)),
-                        "thumbnail": info.get("thumbnail", ""),
-                    }
-        except Exception as e:
-            logger.warning(f"İlk arama denemesi ({query}) başarısız: {e}, alternatif istemci deneniyor...")
+                    entry = None
+                    if "entries" in info:
+                        entries = list(info["entries"])
+                        if entries and entries[0]:
+                            entry = entries[0]
+                    elif info.get("_type") != "playlist" and info.get("id"):
+                        entry = info
 
-        # İkinci deneme (Fallback): Web creator ve alternatif profil
+                    if entry and entry.get("id"):
+                        vid = entry.get("id")
+                        title = entry.get("title") or query
+                        web_url = entry.get("url") or entry.get("webpage_url") or f"https://www.youtube.com/watch?v={vid}"
+                        if not web_url.startswith("http"):
+                            web_url = f"https://www.youtube.com/watch?v={vid}"
+                        duration = entry.get("duration") or 0
+
+                        return {
+                            "title": title,
+                            "url": web_url,
+                            "duration": duration,
+                            "duration_str": _format_duration(duration),
+                            "thumbnail": entry.get("thumbnail", ""),
+                        }
+        except Exception as e:
+            logger.warning(f"İlk arama denemesi ({query}) uyarısı: {e}, alternatif deneniyor...")
+
+        # 2. Alternatif profil ile arama (Fallback)
         try:
             fallback_opts = {
                 **opts,
                 "extractor_args": {
                     "youtube": {
-                        "player_client": ["android", "web_creator", "mweb", "ios"],
+                        "player_client": ["web_creator", "mweb", "android", "ios"],
                     }
                 },
             }
             with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                target = query if query.startswith(("http://", "https://")) else f"ytsearch1:{query}"
                 info = ydl.extract_info(target, download=False)
-                if info and "entries" in info and info["entries"]:
-                    info = info["entries"][0]
                 if info:
-                    return {
-                        "title": info.get("title", "Bilinmeyen Şarkı"),
-                        "url": info.get("webpage_url", query),
-                        "duration": info.get("duration", 0),
-                        "duration_str": _format_duration(info.get("duration", 0)),
-                        "thumbnail": info.get("thumbnail", ""),
-                    }
+                    entry = None
+                    if "entries" in info:
+                        entries = list(info["entries"])
+                        if entries and entries[0]:
+                            entry = entries[0]
+                    elif info.get("_type") != "playlist" and info.get("id"):
+                        entry = info
+
+                    if entry and entry.get("id"):
+                        vid = entry.get("id")
+                        title = entry.get("title") or query
+                        web_url = entry.get("url") or entry.get("webpage_url") or f"https://www.youtube.com/watch?v={vid}"
+                        if not web_url.startswith("http"):
+                            web_url = f"https://www.youtube.com/watch?v={vid}"
+                        duration = entry.get("duration") or 0
+
+                        return {
+                            "title": title,
+                            "url": web_url,
+                            "duration": duration,
+                            "duration_str": _format_duration(duration),
+                            "thumbnail": entry.get("thumbnail", ""),
+                        }
         except Exception as e2:
             logger.error(f"YouTube arama hatası ({query}): {e2}")
             return None
+
+        return None
 
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(_executor, _search)
@@ -232,19 +243,18 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
     """
     file_hash = hash(url) & 0xFFFFFFFF
     output_template = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.%(ext)s")
-    final_path = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.ogg")
-    fallback_path = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.mp3")
+    final_path = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.opus")
+    fallback_path = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.ogg")
+    mp3_path = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.mp3")
 
     # Cache kontrolü
-    if _is_valid_file(final_path):
-        logger.info(f"Cache'den ses kullanılıyor (ogg): {final_path}")
-        return final_path
-    if _is_valid_file(fallback_path):
-        logger.info(f"Cache'den ses kullanılıyor (mp3): {fallback_path}")
-        return fallback_path
+    for p in [final_path, fallback_path, mp3_path]:
+        if _is_valid_file(p):
+            logger.info(f"Cache'den ses kullanılıyor: {p}")
+            return p
 
     # Bozuk cache dosyasını temizle
-    for p in [final_path, fallback_path]:
+    for p in [final_path, fallback_path, mp3_path]:
         if os.path.exists(p):
             os.remove(p)
 
