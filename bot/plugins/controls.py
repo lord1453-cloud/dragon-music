@@ -15,6 +15,8 @@ from bot.theme import (
     msg_paused, msg_resumed, msg_skipped,
     msg_stopped, msg_shuffled, msg_queue_cleared,
     msg_not_playing, msg_error,
+    get_panel_text, get_panel_keyboard, get_player_keyboard,
+    get_system_stats_text, get_stats_keyboard,
 )
 from utils.queue_manager import queue
 from utils.ytdl import (
@@ -25,6 +27,47 @@ from utils.ytdl import (
 from bot.plugins.play import make_stream
 
 logger = logging.getLogger(__name__)
+
+
+# ── İnteraktif Kontrol Paneli Komutları ────────────────────────
+@Client.on_message(filters.command(["panel", "kontrol", "cpanel", "dashboard"]))
+async def panel_command(client: Client, message: Message):
+    """
+    /panel veya /kontrol komutu:
+    Şu anki yayın durumu, çalan parça ve interaktif butonlarla
+    canlı Kontrol Panelini açar.
+    """
+    chat_id = message.chat.id
+    chat_title = message.chat.title or "Özel Sohbet"
+
+    current_track = await queue.get_current(chat_id)
+    queue_tracks = await queue.get_queue(chat_id)
+
+    panel_text = get_panel_text(
+        chat_title=chat_title,
+        current_track=current_track,
+        queue_count=len(queue_tracks),
+        is_paused=False,
+    )
+
+    await message.reply_text(
+        text=panel_text,
+        reply_markup=get_panel_keyboard(is_paused=False),
+    )
+
+
+# ── Canlı Sistem İstatistikleri Komutu ────────────────────────
+@Client.on_message(filters.command(["stats", "istatistik", "durum"]))
+async def stats_command(client: Client, message: Message):
+    """
+    /stats veya /durum komutu:
+    RAM, CPU, Uptime ve motor istatistiklerini gösterir.
+    """
+    stats_text = get_system_stats_text()
+    await message.reply_text(
+        text=stats_text,
+        reply_markup=get_stats_keyboard(),
+    )
 
 
 @Client.on_message(filters.command(["duraklat", "pause", "durdur"]) & filters.group)

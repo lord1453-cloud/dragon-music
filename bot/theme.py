@@ -88,8 +88,14 @@ COMMANDS_TEXT = f"""
 {DOWNLOAD} `/indir <şarkı adı veya link>`
 ↳ Ejderha şarkıyı MP3 olarak pençeleriyle kapar!
 
+🎛️ `/panel` veya `/kontrol`
+↳ İnteraktif ve canlı Kontrol Panelini açar.
+
+📊 `/stats` veya `/durum`
+↳ Canlı CPU, RAM ve sistem istatistiklerini gösterir.
+
 {MUSIC} `/menu`
-↳ Bu menüyü tekrar çağırır.
+↳ Ana menüyü tekrar çağırır.
 ━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
@@ -279,7 +285,7 @@ def msg_usage(command: str, example: str) -> str:
         f"Örnek: `{example}`"
     )
 
-# ── Inline Keyboard Düzenleri ─────────────────────────────────
+# ── Inline Keyboard Düzenleri & Kontrol Paneli ────────────────
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """Ana menü butonlarını döndürür."""
@@ -289,13 +295,149 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(f"{DOWNLOAD} Nasıl İndirilir?", callback_data="menu_download"),
         ],
         [
-            InlineKeyboardButton(f"{GEAR} Ayarlar", callback_data="menu_settings"),
+            InlineKeyboardButton(f"{GEAR} Ayarlar & Bilgi", callback_data="menu_settings"),
+            InlineKeyboardButton(f"🎛️ Kontrol Paneli", callback_data="ctrl_panel"),
+        ],
+        [
             InlineKeyboardButton(f"{CROWN} Geliştirici", callback_data="menu_developer"),
+        ],
+    ])
+
+def get_player_keyboard(is_paused: bool = False) -> InlineKeyboardMarkup:
+    """Çalan şarkı / video mesajının altına eklenen hızlı interaktif kontrol butonları."""
+    play_pause_btn = (
+        InlineKeyboardButton("▶️ Devam", callback_data="ctrl_resume")
+        if is_paused else
+        InlineKeyboardButton("⏸️ Duraklat", callback_data="ctrl_pause")
+    )
+    return InlineKeyboardMarkup([
+        [
+            play_pause_btn,
+            InlineKeyboardButton("⏭️ Geç", callback_data="ctrl_skip"),
+            InlineKeyboardButton("🔀 Karıştır", callback_data="ctrl_shuffle"),
+        ],
+        [
+            InlineKeyboardButton("📋 Kuyruk", callback_data="ctrl_queue"),
+            InlineKeyboardButton("🎛️ Panel", callback_data="ctrl_panel"),
+            InlineKeyboardButton("🛑 Bitir", callback_data="ctrl_stop"),
+        ],
+    ])
+
+def get_panel_keyboard(is_paused: bool = False) -> InlineKeyboardMarkup:
+    """Detaylı interaktif Kontrol Paneli butonları."""
+    play_pause_btn = (
+        InlineKeyboardButton("▶️ Oynat / Devam", callback_data="ctrl_resume")
+        if is_paused else
+        InlineKeyboardButton("⏸️ Duraklat", callback_data="ctrl_pause")
+    )
+    return InlineKeyboardMarkup([
+        [
+            play_pause_btn,
+            InlineKeyboardButton("⏭️ Sıradakine Geç", callback_data="ctrl_skip"),
+        ],
+        [
+            InlineKeyboardButton("🔀 Kuyruğu Karıştır", callback_data="ctrl_shuffle"),
+            InlineKeyboardButton("🧹 Sırayı Temizle", callback_data="ctrl_clear"),
+        ],
+        [
+            InlineKeyboardButton("📋 Kuyruk Listesi", callback_data="ctrl_queue"),
+            InlineKeyboardButton("📊 Sistem Durumu", callback_data="ctrl_stats"),
+        ],
+        [
+            InlineKeyboardButton("🛑 Yayını Sonlandır", callback_data="ctrl_stop"),
+            InlineKeyboardButton("🔄 Paneli Yenile", callback_data="ctrl_refresh"),
+        ],
+        [
+            InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
+            InlineKeyboardButton("❌ Kapat", callback_data="ctrl_close"),
+        ],
+    ])
+
+def get_stats_keyboard() -> InlineKeyboardMarkup:
+    """Sistem istatistikleri altındaki geri ve yenile butonları."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🔄 Yenile", callback_data="ctrl_stats"),
+            InlineKeyboardButton("🎛️ Panele Dön", callback_data="ctrl_panel"),
+        ],
+        [
+            InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
         ],
     ])
 
 def get_back_button() -> InlineKeyboardMarkup:
     """Geri butonu döndürür."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"🔙 Ana Menü", callback_data="menu_main")],
+        [
+            InlineKeyboardButton("🎛️ Kontrol Paneli", callback_data="ctrl_panel"),
+            InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
+        ],
     ])
+
+def get_panel_text(chat_title: str, current_track: dict = None, queue_count: int = 0, is_paused: bool = False) -> str:
+    """Detaylı interaktif Kontrol Paneli mesaj metnini üretir."""
+    status_icon = "⏸️ Duraklatıldı" if is_paused else "▶️ Oynatılıyor"
+    if current_track:
+        media_icon = "🎬 Video (720p HD)" if current_track.get("stream_type") == "video" else "🎵 Ses (320kbps)"
+        title = current_track.get("title", "Bilinmiyor")
+        duration = current_track.get("duration_str", "Bilinmiyor")
+        requester = current_track.get("requester", "Bilinmiyor")
+        now_playing_block = (
+            f"{FIRE} **Şu An Çalan:**\n"
+            f"↳ **{title}**\n"
+            f"↳ Tür: `{media_icon}` | Süre: `{duration}`\n"
+            f"↳ İsteyen: `{requester}`\n"
+        )
+    else:
+        now_playing_block = f"{DRAGON} **Durum:** Şu an aktif çalan parça yok.\n"
+
+    return f"""
+{DRAGON_FACE} **EJDERHA KONTROL PANELİ** {DRAGON_FACE}
+━━━━━━━━━━━━━━━━━━━━━━━━
+📍 **Grup / Sohbet:** `{chat_title}`
+⚡ **Yayın Durumu:** `{status_icon}`
+📋 **Kuyruktaki Parça Sayısı:** `{queue_count}` adet
+
+{now_playing_block}
+━━━━━━━━━━━━━━━━━━━━━━━━
+{GEM} *Aşağıdaki butonları kullanarak yayını canlı yönetebilirsiniz:*
+"""
+
+def get_system_stats_text() -> str:
+    """Sunucu ve bot çalışma istatistiklerini hesaplar ve döndürür."""
+    import psutil
+    import time
+    from datetime import datetime
+
+    # CPU ve RAM
+    cpu_percent = psutil.cpu_percent(interval=0.1)
+    ram = psutil.virtual_memory()
+    ram_used = round((ram.total - ram.available) / (1024 ** 2), 1)
+    ram_total = round(ram.total / (1024 ** 2), 1)
+    ram_percent = ram.percent
+
+    # Disk
+    disk = psutil.disk_usage("/")
+    disk_used = round(disk.used / (1024 ** 3), 1)
+    disk_total = round(disk.total / (1024 ** 3), 1)
+
+    return f"""
+📊 **EJDERHA SİSTEM & MOTOR İSTATİSTİKLERİ** {DRAGON}
+━━━━━━━━━━━━━━━━━━━━━━━━
+🖥️ **Sunucu Kaynak Kullanımı:**
+• **CPU Kullanımı:** `%{cpu_percent}`
+• **RAM Kullanımı:** `{ram_used} MB / {ram_total} MB (%{ram_percent})`
+• **Disk Alanı:** `{disk_used} GB / {disk_total} GB (%{disk.percent})`
+
+🚀 **Bot Motoru & Servisler:**
+• **Sürüm:** `v1.1.0 (Ejderha Edition)`
+• **Ses Motoru:** `PyTgCalls v1.2.9 + NTgCalls`
+• **Pyrogram Sürümü:** `v2.0.106`
+• **Akış Formatları:** `Opus 48kHz / H.264 MP4 720p`
+• **Entegrasyonlar:** `YouTube (Anti-Bot Bypass) & Spotify API`
+
+🕒 **Sistem Saati:** `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`
+━━━━━━━━━━━━━━━━━━━━━━━━
+✨ *Tüm servisler maksimum performansta çalışıyor!*
+"""
+

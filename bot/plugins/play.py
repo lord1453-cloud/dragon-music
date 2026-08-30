@@ -30,7 +30,7 @@ from bot.clients import bot_client, call_client
 from bot.theme import (
     msg_searching, msg_playing, msg_queued,
     msg_error, msg_usage, msg_no_voice_chat,
-    msg_spotify_importing,
+    msg_spotify_importing, get_player_keyboard,
 )
 from utils.queue_manager import queue
 from utils.ytdl import (
@@ -162,10 +162,10 @@ async def _play_next(client: Client, chat_id: int, message: Message = None):
 
         msg_text = msg_playing(track["title"], track.get("duration_str", ""), is_video=is_video)
         if message:
-            await message.reply_text(msg_text)
+            await message.reply_text(msg_text, reply_markup=get_player_keyboard(is_paused=False))
         else:
             try:
-                await bot_client.send_message(chat_id, msg_text)
+                await bot_client.send_message(chat_id, msg_text, reply_markup=get_player_keyboard(is_paused=False))
             except Exception:
                 pass
 
@@ -415,7 +415,8 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
                     return
 
             await status_msg.edit_text(
-                msg_playing(track["title"], track.get("duration_str", ""), is_video=is_video)
+                msg_playing(track["title"], track.get("duration_str", ""), is_video=is_video),
+                reply_markup=get_player_keyboard(is_paused=False),
             )
             await _prefetch_next(chat_id)
 
