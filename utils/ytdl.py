@@ -278,28 +278,31 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
     }
 
     def _download():
-        client_profiles = [
-            ["tv", "web_safari", "android", "ios"],
-            ["android", "mweb", "ios"],
-            ["web_safari", "tv"],
+        download_configs = [
+            {"extractor_args": {"youtube": {"player_client": ["android", "ios"]}}, "cookiefile": None, "name": "Mobile (Android/iOS)"},
+            {"extractor_args": {"youtube": {"player_client": ["mweb", "web_creator", "web"]}}, "cookiefile": COOKIES_FILE, "name": "Cookies (Web/MWeb)"} if COOKIES_FILE else None,
+            {"extractor_args": {"youtube": {"player_client": ["tv", "web_safari"]}}, "cookiefile": None, "name": "Smart TV / WebSafari"},
         ]
 
-        for profile in client_profiles:
+        for cfg in download_configs:
+            if not cfg:
+                continue
             try:
                 run_opts = {
                     **opts,
-                    "extractor_args": {
-                        "youtube": {
-                            "player_client": profile,
-                        }
-                    },
+                    "extractor_args": cfg["extractor_args"],
                 }
+                if cfg.get("cookiefile"):
+                    run_opts["cookiefile"] = cfg["cookiefile"]
+                else:
+                    run_opts.pop("cookiefile", None)
+
                 with yt_dlp.YoutubeDL(run_opts) as ydl:
                     ydl.download([url])
 
                 for candidate_path in [final_path, fallback_path, mp3_path]:
                     if _is_valid_file(candidate_path):
-                        logger.info(f"Ses stream dosyası hazır ({profile[0]}): {candidate_path}")
+                        logger.info(f"Ses stream dosyası hazır ({cfg['name']}): {candidate_path}")
                         return candidate_path
 
                 for ext in [".opus", ".ogg", ".mp3", ".m4a", ".webm"]:
@@ -307,7 +310,7 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
                     if _is_valid_file(candidate):
                         return candidate
             except Exception as e:
-                logger.warning(f"Ses indirme denemesi ({profile}) uyarısı: {e}, sonraki profil deneniyor...")
+                logger.warning(f"Ses indirme profili ({cfg['name']}) uyarısı: {e}, sonraki profil deneniyor...")
 
         logger.error(f"Tüm istemci profilleri ile ses stream indirme başarısız: {url}")
         return None
@@ -362,27 +365,30 @@ async def get_video_file_for_stream(url: str) -> Optional[str]:
     }
 
     def _download():
-        client_profiles = [
-            ["tv", "web_safari", "android", "ios"],
-            ["android", "mweb", "ios"],
-            ["web_safari", "tv"],
+        download_configs = [
+            {"extractor_args": {"youtube": {"player_client": ["android", "ios"]}}, "cookiefile": None, "name": "Mobile (Android/iOS)"},
+            {"extractor_args": {"youtube": {"player_client": ["mweb", "web_creator", "web"]}}, "cookiefile": COOKIES_FILE, "name": "Cookies (Web/MWeb)"} if COOKIES_FILE else None,
+            {"extractor_args": {"youtube": {"player_client": ["tv", "web_safari"]}}, "cookiefile": None, "name": "Smart TV / WebSafari"},
         ]
 
-        for profile in client_profiles:
+        for cfg in download_configs:
+            if not cfg:
+                continue
             try:
                 run_opts = {
                     **opts,
-                    "extractor_args": {
-                        "youtube": {
-                            "player_client": profile,
-                        }
-                    },
+                    "extractor_args": cfg["extractor_args"],
                 }
+                if cfg.get("cookiefile"):
+                    run_opts["cookiefile"] = cfg["cookiefile"]
+                else:
+                    run_opts.pop("cookiefile", None)
+
                 with yt_dlp.YoutubeDL(run_opts) as ydl:
                     ydl.download([url])
 
                 if _is_valid_file(final_path):
-                    logger.info(f"Video stream dosyası hazır (mp4 720p, {profile[0]}): {final_path}")
+                    logger.info(f"Video stream dosyası hazır (mp4 720p, {cfg['name']}): {final_path}")
                     return final_path
 
                 # MP4 uzantılı diğer adayları tara
@@ -392,7 +398,7 @@ async def get_video_file_for_stream(url: str) -> Optional[str]:
                         logger.info(f"Video stream adayı bulundu ({ext}): {candidate}")
                         return candidate
             except Exception as e:
-                logger.warning(f"Video indirme denemesi ({profile}) uyarısı: {e}, sonraki profil deneniyor...")
+                logger.warning(f"Video indirme profili ({cfg['name']}) uyarısı: {e}, sonraki profil deneniyor...")
 
         logger.error(f"Tüm istemci profilleri ile video indirme başarısız: {url}")
         return None
