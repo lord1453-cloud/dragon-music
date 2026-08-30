@@ -328,6 +328,28 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
             except Exception as e:
                 logger.warning(f"Ses indirme profili ({cfg['name']}) uyarısı: {e}, sonraki profil deneniyor...")
 
+        # 4. Universal Fallback: Genişletilmiş format filtresi (bestaudio/best/ba/b)
+        try:
+            universal_opts = {
+                **opts,
+                "format": "bestaudio/best/ba/b",
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["android", "ios", "tv"],
+                    }
+                },
+            }
+            with yt_dlp.YoutubeDL(universal_opts) as ydl:
+                ydl.download([url])
+
+            for ext in [".opus", ".ogg", ".mp3", ".m4a", ".webm"]:
+                candidate = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}{ext}")
+                if _is_valid_file(candidate):
+                    logger.info(f"Ses stream dosyası hazır (Universal Fallback): {candidate}")
+                    return candidate
+        except Exception as e_univ:
+            logger.warning(f"Universal ses fallback uyarısı: {e_univ}")
+
         logger.error(f"Tüm istemci profilleri ile ses stream indirme başarısız: {url}")
         return None
 
