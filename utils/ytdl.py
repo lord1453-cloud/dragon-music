@@ -46,7 +46,7 @@ def _get_base_opts() -> dict:
         "retries": 5,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "mweb", "web", "ios"],
+                "player_client": ["tv", "web_safari", "android", "ios"],
             }
         },
     }
@@ -278,28 +278,39 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
     }
 
     def _download():
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([url])
+        client_profiles = [
+            ["tv", "web_safari", "android", "ios"],
+            ["android", "mweb", "ios"],
+            ["web_safari", "tv"],
+        ]
 
-            if _is_valid_file(final_path):
-                logger.info(f"Ses stream dosyası hazır (ogg): {final_path}")
-                return final_path
+        for profile in client_profiles:
+            try:
+                run_opts = {
+                    **opts,
+                    "extractor_args": {
+                        "youtube": {
+                            "player_client": profile,
+                        }
+                    },
+                }
+                with yt_dlp.YoutubeDL(run_opts) as ydl:
+                    ydl.download([url])
 
-            if _is_valid_file(fallback_path):
-                logger.info(f"Ses stream dosyası hazır (mp3): {fallback_path}")
-                return fallback_path
+                for candidate_path in [final_path, fallback_path, mp3_path]:
+                    if _is_valid_file(candidate_path):
+                        logger.info(f"Ses stream dosyası hazır ({profile[0]}): {candidate_path}")
+                        return candidate_path
 
-            for ext in [".ogg", ".mp3", ".m4a", ".opus", ".webm"]:
-                candidate = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}{ext}")
-                if _is_valid_file(candidate):
-                    return candidate
+                for ext in [".opus", ".ogg", ".mp3", ".m4a", ".webm"]:
+                    candidate = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}{ext}")
+                    if _is_valid_file(candidate):
+                        return candidate
+            except Exception as e:
+                logger.warning(f"Ses indirme denemesi ({profile}) uyarısı: {e}, sonraki profil deneniyor...")
 
-            logger.error(f"Ses stream dosyası bulunamadı: stream_{file_hash}.*")
-            return None
-        except Exception as e:
-            logger.error(f"Ses stream indirme hatası: {e}")
-            return None
+        logger.error(f"Tüm istemci profilleri ile ses stream indirme başarısız: {url}")
+        return None
 
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(_executor, _download)
@@ -351,26 +362,40 @@ async def get_video_file_for_stream(url: str) -> Optional[str]:
     }
 
     def _download():
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([url])
+        client_profiles = [
+            ["tv", "web_safari", "android", "ios"],
+            ["android", "mweb", "ios"],
+            ["web_safari", "tv"],
+        ]
 
-            if _is_valid_file(final_path):
-                logger.info(f"Video stream dosyası hazır (mp4 720p): {final_path}")
-                return final_path
+        for profile in client_profiles:
+            try:
+                run_opts = {
+                    **opts,
+                    "extractor_args": {
+                        "youtube": {
+                            "player_client": profile,
+                        }
+                    },
+                }
+                with yt_dlp.YoutubeDL(run_opts) as ydl:
+                    ydl.download([url])
 
-            # MP4 uzantılı diğer adayları tara
-            for ext in [".mp4", ".mkv", ".webm"]:
-                candidate = os.path.join(DOWNLOADS_DIR, f"vstream_{file_hash}{ext}")
-                if _is_valid_file(candidate):
-                    logger.info(f"Video stream adayı bulundu ({ext}): {candidate}")
-                    return candidate
+                if _is_valid_file(final_path):
+                    logger.info(f"Video stream dosyası hazır (mp4 720p, {profile[0]}): {final_path}")
+                    return final_path
 
-            logger.error(f"Video dosyası bulunamadı: vstream_{file_hash}.*")
-            return None
-        except Exception as e:
-            logger.error(f"Video indirme hatası: {e}")
-            return None
+                # MP4 uzantılı diğer adayları tara
+                for ext in [".mp4", ".mkv", ".webm"]:
+                    candidate = os.path.join(DOWNLOADS_DIR, f"vstream_{file_hash}{ext}")
+                    if _is_valid_file(candidate):
+                        logger.info(f"Video stream adayı bulundu ({ext}): {candidate}")
+                        return candidate
+            except Exception as e:
+                logger.warning(f"Video indirme denemesi ({profile}) uyarısı: {e}, sonraki profil deneniyor...")
+
+        logger.error(f"Tüm istemci profilleri ile video indirme başarısız: {url}")
+        return None
 
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(_executor, _download)
