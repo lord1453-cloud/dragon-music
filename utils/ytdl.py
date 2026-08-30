@@ -217,20 +217,40 @@ async def download_audio(query: str) -> Optional[dict]:
     }
 
     def _download():
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([info["url"]])
-            if _is_valid_file(output_path):
-                return {
-                    "title": info["title"],
-                    "file_path": output_path,
-                    "duration": info["duration"],
-                    "duration_str": info["duration_str"],
+        download_configs = [
+            {"extractor_args": {"youtube": {"player_client": ["android", "ios"]}}, "cookiefile": None, "name": "Mobile (Android/iOS)"},
+            {"extractor_args": {"youtube": {"player_client": ["mweb", "web_creator", "web"]}}, "cookiefile": COOKIES_FILE, "name": "Cookies (Web/MWeb)"} if COOKIES_FILE else None,
+            {"extractor_args": {"youtube": {"player_client": ["tv", "web_safari"]}}, "cookiefile": None, "name": "Smart TV / WebSafari"},
+        ]
+
+        for cfg in download_configs:
+            if not cfg:
+                continue
+            try:
+                run_opts = {
+                    **opts,
+                    "extractor_args": cfg["extractor_args"],
                 }
-            return None
-        except Exception as e:
-            logger.error(f"İndirme hatası: {e}")
-            return None
+                if cfg.get("cookiefile"):
+                    run_opts["cookiefile"] = cfg["cookiefile"]
+                else:
+                    run_opts.pop("cookiefile", None)
+
+                with yt_dlp.YoutubeDL(run_opts) as ydl:
+                    ydl.download([info["url"]])
+
+                if _is_valid_file(output_path):
+                    return {
+                        "title": info["title"],
+                        "file_path": output_path,
+                        "duration": info["duration"],
+                        "duration_str": info["duration_str"],
+                    }
+            except Exception as e:
+                logger.warning(f"MP3 indirme profili ({cfg['name']}) uyarısı: {e}, sonraki profil deneniyor...")
+
+        logger.error(f"Tüm profiller ile MP3 indirme başarısız: {info['url']}")
+        return None
 
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(_executor, _download)
