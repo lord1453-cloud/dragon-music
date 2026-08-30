@@ -167,7 +167,7 @@ async def control_callback(client: Client, callback: CallbackQuery):
                     if is_video:
                         file_path = await get_video_file_for_stream(next_track["url"])
                     else:
-                        file_path = await get_audio_file_for_stream(next_track["url"])
+                        file_path = await get_audio_file_for_stream(next_track["url"], title=next_track.get("title"))
 
                     if not file_path:
                         await callback.answer("❌ Medya dosyası indirilemedi!", show_alert=True)

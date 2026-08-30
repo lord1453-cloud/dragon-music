@@ -130,7 +130,7 @@ async def skip_command(client: Client, message: Message):
             if is_video:
                 file_path = await get_video_file_for_stream(next_track["url"])
             else:
-                file_path = await get_audio_file_for_stream(next_track["url"])
+                file_path = await get_audio_file_for_stream(next_track["url"], title=next_track.get("title"))
 
             if not file_path:
                 await message.reply_text(msg_error("Sıradaki medya dosyası indirilemedi."))
@@ -151,7 +151,7 @@ async def skip_command(client: Client, message: Message):
                 if preload_video:
                     asyncio.create_task(get_video_file_for_stream(preload_track["url"]))
                 else:
-                    asyncio.create_task(get_audio_file_for_stream(preload_track["url"]))
+                    asyncio.create_task(get_audio_file_for_stream(preload_track["url"], title=preload_track.get("title")))
 
         except Exception as e:
             logger.error(f"Atlama hatası: {e}")

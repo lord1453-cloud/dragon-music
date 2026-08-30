@@ -126,7 +126,7 @@ async def _play_next(client: Client, chat_id: int, message: Message = None):
         if is_video:
             file_path = await get_video_file_for_stream(track["url"])
         else:
-            file_path = await get_audio_file_for_stream(track["url"])
+            file_path = await get_audio_file_for_stream(track["url"], title=track.get("title"))
 
         if not file_path:
             if message:
@@ -378,7 +378,7 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
             if is_video:
                 file_path = await get_video_file_for_stream(result["url"])
             else:
-                file_path = await get_audio_file_for_stream(result["url"])
+                file_path = await get_audio_file_for_stream(result["url"], title=result.get("title"))
 
             if not file_path:
                 await status_msg.edit_text(msg_error("Medya dosyası indirilemedi."))

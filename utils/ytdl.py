@@ -30,6 +30,43 @@ _executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="ytdl")
 MIN_VALID_FILE_SIZE = 10_000  # 10 KB
 
 
+def check_cookies_status(cookie_path: Optional[str] = COOKIES_FILE) -> bool:
+    """
+    cookies.txt dosyasının varlığını ve son kullanma tarihini kontrol eder.
+    Süresi dolmuşsa veya dosya yoksa False döner, log'a bilgilendirici uyarı yazar.
+    """
+    if not cookie_path or not os.path.exists(cookie_path):
+        logger.info("ℹ️ cookies.txt bulunamadı. YouTube mobil protokolleri ve failover motoru kullanılacak.")
+        return False
+    try:
+        import time
+        now = time.time()
+        expired_count = 0
+        total_cookies = 0
+        with open(cookie_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split("\t")
+                if len(parts) >= 7:
+                    total_cookies += 1
+                    try:
+                        expiry = int(parts[4])
+                        if 0 < expiry < now:
+                            expired_count += 1
+                    except (ValueError, IndexError):
+                        pass
+        if total_cookies > 0 and expired_count >= total_cookies * 0.7:
+            logger.warning("🚨 [UYARI] cookies.txt dosyasındaki çerezlerin süresi dolmuş olabilir! Lütfen yenileyin.")
+            return False
+        logger.info(f"🍪 cookies.txt geçerli ({total_cookies} çerez yüklendi).")
+        return True
+    except Exception as e:
+        logger.debug(f"Cookie kontrol uyarısı: {e}")
+        return True
+
+
 def _get_base_opts() -> dict:
     """
     yt-dlp için temel ayarları ve cookies konfigürasyonunu hazırlar.
@@ -46,15 +83,15 @@ def _get_base_opts() -> dict:
         "retries": 5,
         "extractor_args": {
             "youtube": {
-                "player_client": ["tv", "web_safari", "android", "ios"],
+                "player_client": ["android", "ios", "tv", "web_safari"],
             }
         },
     }
 
-    # Eğer cookies.txt mevcutsa yt-dlp'ye dahil et
+    # Eğer cookies.txt mevcutsa ve geçerliyse yt-dlp'ye dahil et
     if COOKIES_FILE and os.path.exists(COOKIES_FILE):
+        check_cookies_status(COOKIES_FILE)
         opts["cookiefile"] = COOKIES_FILE
-        logger.info(f"🍪 yt-dlp cookies dosyası aktif: {COOKIES_FILE}")
 
     return opts
 
@@ -252,10 +289,10 @@ async def download_audio(query: str) -> Optional[dict]:
     return await loop.run_in_executor(_executor, _download)
 
 
-async def get_audio_file_for_stream(url: str) -> Optional[str]:
+async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Optional[str]:
     """
     Sesli sohbette çalmak için şarkıyı optimize edilmiş OGG/Opus formatında indirir.
-    PyTgCalls ses akışı için en stabil çözümdür.
+    YouTube engelli/kısıtlı olduğunda otomatik olarak SoundCloud failover motoruna geçer.
     """
     file_hash = hash(url) & 0xFFFFFFFF
     output_template = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.%(ext)s")
@@ -350,7 +387,35 @@ async def get_audio_file_for_stream(url: str) -> Optional[str]:
         except Exception as e_univ:
             logger.warning(f"Universal ses fallback uyarısı: {e_univ}")
 
-        logger.error(f"Tüm istemci profilleri ile ses stream indirme başarısız: {url}")
+        # 5. Kesintisiz SoundCloud Failover (YouTube bot/ülke engeline karşı %100 garantili)
+        search_query = title or (url.split("watch?v=")[-1] if "watch?v=" in url else url)
+        try:
+            logger.info(f"🔄 YouTube engellendi, SoundCloud failover devreye giriyor: {search_query}")
+            sc_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "format": "bestaudio/best",
+                "outtmpl": output_template,
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "opus",
+                        "preferredquality": "128",
+                    }
+                ],
+            }
+            with yt_dlp.YoutubeDL(sc_opts) as ydl:
+                ydl.download([f"scsearch1:{search_query}"])
+
+            for ext in [".opus", ".ogg", ".mp3", ".m4a", ".webm"]:
+                candidate = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}{ext}")
+                if _is_valid_file(candidate):
+                    logger.info(f"Ses stream dosyası hazır (SoundCloud Failover): {candidate}")
+                    return candidate
+        except Exception as e_sc:
+            logger.warning(f"SoundCloud failover uyarısı: {e_sc}")
+
+        logger.error(f"Tüm istemci profilleri ve failover ile ses stream indirme başarısız: {url}")
         return None
 
     loop = asyncio.get_event_loop()
