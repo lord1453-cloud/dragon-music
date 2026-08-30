@@ -85,6 +85,10 @@ class QueueManager:
         async with self._lock:
             return self._current.get(chat_id)
 
+    async def get_current(self, chat_id: int) -> Optional[dict]:
+        """current() için alias metod."""
+        return await self.current(chat_id)
+
     async def set_current(self, chat_id: int, track: Optional[dict]):
         """
         Şu an çalan şarkıyı ayarlar.
