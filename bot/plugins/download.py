@@ -50,10 +50,10 @@ async def download_command(client: Client, message: Message):
     # İndirme durumunu güncelle
     await status_msg.edit_text(msg_downloading(result["title"]))
 
-    # Şarkıyı indir
-    download_result = await download_audio(query)
+    # Şarkıyı indir (önceden aranan bilgiyi doğrudan vererek çift aramayı önle)
+    download_result = await download_audio(info=result)
     if not download_result or not os.path.exists(download_result["file_path"]):
-        await status_msg.edit_text(msg_error("Şarkı indirilemedi!"))
+        await status_msg.edit_text(msg_error("Şarkı indirilemedi! Lütfen daha sonra tekrar deneyin."))
         return
 
     try:

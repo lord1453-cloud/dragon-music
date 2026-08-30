@@ -31,6 +31,7 @@ from bot.theme import (
     msg_searching, msg_playing, msg_queued,
     msg_error, msg_usage, msg_no_voice_chat,
     msg_spotify_importing, get_player_keyboard,
+    msg_rate_limited, msg_bot_detected,
 )
 from utils.queue_manager import queue
 from utils.ytdl import (
@@ -38,6 +39,9 @@ from utils.ytdl import (
     get_audio_file_for_stream,
     get_video_file_for_stream,
     cleanup_old_streams,
+    YTDLError,
+    YouTubeRateLimitError,
+    YouTubeBotChallengeError,
 )
 from utils.spotify import is_spotify_url, get_spotify_tracks
 
@@ -261,12 +265,16 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
 
         # ── Çoklu şarkı (Album / Playlist) ────────────────────
         if len(spotify_search_list) > 1:
-            await status_msg.edit_text(msg_spotify_importing(len(spotify_search_list)))
+            import_list = spotify_search_list[:50]  # Max 50 parça ile sınırla (rate limit önlemi)
+            await status_msg.edit_text(msg_spotify_importing(len(import_list)))
 
             first_track = None
 
-            for artist_song in spotify_search_list:
-                # Her şarkı için "ytsearch1:Sanatçı - Şarkı" olarak YouTube'da ara
+            for i, artist_song in enumerate(import_list):
+                # İstekler arasına küçük bekleme koyarak YouTube rate limitini önle
+                if i > 0:
+                    await asyncio.sleep(0.3)
+
                 logger.info(f"🟢 Spotify → YouTube araması: ytsearch1:{artist_song}")
                 yt_res = await search_youtube(artist_song)
                 if not yt_res:

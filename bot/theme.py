@@ -273,6 +273,22 @@ def msg_no_voice_chat() -> str:
     """Sesli sohbet bulunamadığında gösterilecek mesaj."""
     return f"{VOLCANO} **Sesli Sohbet Bulunamadı!** {DRAGON}\n\n*Lütfen önce grupta sesli sohbeti başlatın.*"
 
+def msg_rate_limited() -> str:
+    """YouTube veya servis geçici hız sınırlaması uyguladığında gösterilecek mesaj."""
+    return (
+        f"⏳ **Geçici Hız Sınırlaması!** {DRAGON}\n\n"
+        f"YouTube çok fazla istek nedeniyle geçici olarak yanıt vermeyi yavaşlattı.\n"
+        f"{FIRE} *Lütfen 1-2 dakika sonra tekrar deneyin veya alternatif arama yapın.*"
+    )
+
+def msg_bot_detected() -> str:
+    """YouTube bot doğrulaması / geçici erişim kısıtlaması uyguladığında gösterilecek mesaj."""
+    return (
+        f"🛡️ **YouTube Geçici Doğrulama Uyarısı!** {DRAGON}\n\n"
+        f"YouTube altyapısı bu parça için geçici doğrulama talep ediyor.\n"
+        f"{SPARKLE} *Bot alternatif kaynakları denedi. Lütfen biraz sonra tekrar deneyin.*"
+    )
+
 def msg_not_playing() -> str:
     """Hiçbir şey çalmıyorken gösterilecek mesaj."""
     return f"{DRAGON} **Ejderha Sessiz!**\n\n*Şu an çalan bir şey yok. /oynat veya /voynat ile yayını başlatın!* {FIRE}"
