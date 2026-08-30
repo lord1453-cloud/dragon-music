@@ -144,18 +144,18 @@ SETTINGS_TEXT = f"""
 """
 
 DEVELOPER_TEXT = f"""
-{CROWN} **GELİŞTİRİCİ** {CROWN}
+{CROWN} **GELİŞTİRİCİ & İLETİŞİM** {CROWN}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-{DRAGON_FACE} Bu bot, ejderhaların gücüyle
-kodlanmıştır!
+{DRAGON_FACE} **Ejderha Müzik Botu** en güçlü
+ve kusursuz ses/video motoruyla tasarlandı!
 
-{FIRE} **Geliştirici:** SpideyDev
-{SPARKLE} **GitHub:** [SpideyMuzikBot]
-{GEM} **İletişim:** @SpideyDev
+{FIRE} **Geliştirici & Sahip:** @LordOFshadowsZ
+{GEM} **İletişim:** [@LordOFshadowsZ](https://t.me/LordOFshadowsZ)
+{SPARKLE} **Proje Deposu:** [dragon-music](https://github.com/lord1453-cloud/dragon-music)
 
 {VOLCANO} Ejderha her zaman gelişmeye devam eder!
-Öneri ve isteklerinizi bekliyoruz.
+Öneri, istek ve destek için geliştiriciyle iletişime geçebilirsiniz.
 
 {SWORD} *"Kod ateşle yazılır, müzikle çalınır!"*
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -361,6 +361,18 @@ def get_stats_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🎛️ Panele Dön", callback_data="ctrl_panel"),
         ],
         [
+            InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
+        ],
+    ])
+
+def get_dev_keyboard() -> InlineKeyboardMarkup:
+    """Geliştirici menüsü butonları."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("👑 Geliştirici İletişim (@LordOFshadowsZ)", url="https://t.me/LordOFshadowsZ"),
+        ],
+        [
+            InlineKeyboardButton("🎛️ Kontrol Paneli", callback_data="ctrl_panel"),
             InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
         ],
     ])

@@ -12,7 +12,7 @@ from pyrogram.enums import ParseMode
 
 from bot.theme import (
     WELCOME_TEXT, SETTINGS_TEXT, COMMANDS_TEXT, DEVELOPER_TEXT,
-    get_main_menu_keyboard, get_back_button,
+    get_main_menu_keyboard, get_back_button, get_dev_keyboard,
 )
 
 logger = logging.getLogger(__name__)
@@ -105,7 +105,7 @@ async def dev_command(client: Client, message: Message):
     await _safe_reply(
         message,
         text=DEVELOPER_TEXT,
-        reply_markup=get_back_button(),
+        reply_markup=get_dev_keyboard(),
     )
 
 

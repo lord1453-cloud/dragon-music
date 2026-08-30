@@ -15,7 +15,7 @@ from bot.clients import call_client, bot_client
 from bot.theme import (
     WELCOME_TEXT, COMMANDS_TEXT, DOWNLOAD_HELP_TEXT,
     SETTINGS_TEXT, DEVELOPER_TEXT,
-    get_main_menu_keyboard, get_back_button,
+    get_main_menu_keyboard, get_back_button, get_dev_keyboard,
     get_panel_keyboard, get_player_keyboard,
     get_panel_text, get_system_stats_text, get_stats_keyboard,
     msg_paused, msg_resumed, msg_skipped, msg_stopped,
@@ -69,7 +69,7 @@ async def menu_callback(client: Client, callback: CallbackQuery):
         elif data == "menu_settings":
             await _safe_edit(callback, text=SETTINGS_TEXT, reply_markup=get_back_button())
         elif data == "menu_developer":
-            await _safe_edit(callback, text=DEVELOPER_TEXT, reply_markup=get_back_button())
+            await _safe_edit(callback, text=DEVELOPER_TEXT, reply_markup=get_dev_keyboard())
     except Exception as e:
         logger.error(f"menu_callback hatası: {e}", exc_info=True)
     finally:
