@@ -43,6 +43,17 @@ LOG_GROUP_ID: Optional[int] = int(_log_group_raw.strip().strip("'\"")) if _log_g
 # YouTube Cookies Yapılandırması (Bot engeli / 403 aşmak için)
 _cookies_env_path: str = os.getenv("COOKIES_FILE_PATH", "cookies.txt")
 _base_dir: str = os.path.dirname(os.path.dirname(__file__))
+
+# Eğer ortam değişkeninden doğrudan cookie metni (COOKIES_DATA) verilmişse dosyaya yaz
+_cookies_data_env: Optional[str] = os.getenv("COOKIES_DATA") or os.getenv("YOUTUBE_COOKIES")
+if _cookies_data_env and _cookies_data_env.strip():
+    _auto_cookies_file = os.path.join(_base_dir, "cookies.txt")
+    try:
+        with open(_auto_cookies_file, "w", encoding="utf-8") as _f:
+            _f.write(_cookies_data_env.strip())
+    except Exception:
+        pass
+
 _possible_cookie_paths = [
     _cookies_env_path,
     os.path.join(_base_dir, _cookies_env_path),
@@ -50,7 +61,7 @@ _possible_cookie_paths = [
 ]
 COOKIES_FILE: Optional[str] = None
 for _cp in _possible_cookie_paths:
-    if os.path.exists(_cp) and os.path.isfile(_cp):
+    if os.path.exists(_cp) and os.path.isfile(_cp) and os.path.getsize(_cp) > 10:
         COOKIES_FILE = os.path.abspath(_cp)
         break
 

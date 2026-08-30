@@ -33,7 +33,8 @@ MIN_VALID_FILE_SIZE = 10_000  # 10 KB
 def _get_base_opts() -> dict:
     """
     yt-dlp için temel ayarları ve cookies konfigürasyonunu hazırlar.
-    YouTube bot engeli (403 Forbidden) aşma parametrelerini içerir.
+    YouTube bot engeli (403 Forbidden / Sign in to confirm you're not a bot)
+    aşma parametrelerini içerir (iOS ve Android mobil istemci önceliği).
     """
     opts = {
         "quiet": True,
@@ -42,27 +43,28 @@ def _get_base_opts() -> dict:
         "geo_bypass": True,
         "source_address": "0.0.0.0",
         "concurrent_fragment_downloads": 4,
-        "socket_timeout": 15,
-        "retries": 3,
+        "socket_timeout": 20,
+        "retries": 5,
         "http_headers": {
             "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0.0 Safari/537.36"
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                "Version/17.4 Mobile/15E148 Safari/604.1"
             ),
-            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
         },
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "web", "mweb"],
+                "player_client": ["ios", "android", "web_creator", "mweb"],
+                "player_skip": ["configs", "webpage"],
             }
         },
     }
 
-    # Eğer cookies.txt mevcutsa yt-dlp'ye dahil et (403 Bot Engelini Aşan Kritik Ayar)
+    # Eğer cookies.txt mevcutsa yt-dlp'ye dahil et
     if COOKIES_FILE and os.path.exists(COOKIES_FILE):
         opts["cookiefile"] = COOKIES_FILE
-        logger.info(f"🍪 yt-dlp cookies.txt dosyası aktif: {COOKIES_FILE}")
+        logger.info(f"🍪 yt-dlp cookies dosyası aktif: {COOKIES_FILE}")
 
     return opts
 
@@ -104,29 +106,49 @@ async def search_youtube(query: str) -> Optional[dict]:
     }
 
     def _search():
+        # İlk deneme: Öncelikli mobil istemciler
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
-                # Eğer doğrudan URL değilse, ytsearch1: ile ara
-                if not query.startswith(("http://", "https://")):
-                    info = ydl.extract_info(f"ytsearch1:{query}", download=False)
-                    if not info or "entries" not in info or not info["entries"]:
-                        return None
+                target = query if query.startswith(("http://", "https://")) else f"ytsearch1:{query}"
+                info = ydl.extract_info(target, download=False)
+                if info and "entries" in info and info["entries"]:
                     info = info["entries"][0]
-                else:
-                    info = ydl.extract_info(query, download=False)
-
-                if not info:
-                    return None
-
-                return {
-                    "title": info.get("title", "Bilinmeyen Şarkı"),
-                    "url": info.get("webpage_url", query),
-                    "duration": info.get("duration", 0),
-                    "duration_str": _format_duration(info.get("duration", 0)),
-                    "thumbnail": info.get("thumbnail", ""),
-                }
+                if info:
+                    return {
+                        "title": info.get("title", "Bilinmeyen Şarkı"),
+                        "url": info.get("webpage_url", query),
+                        "duration": info.get("duration", 0),
+                        "duration_str": _format_duration(info.get("duration", 0)),
+                        "thumbnail": info.get("thumbnail", ""),
+                    }
         except Exception as e:
-            logger.error(f"YouTube arama hatası ({query}): {e}")
+            logger.warning(f"İlk arama denemesi ({query}) başarısız: {e}, alternatif istemci deneniyor...")
+
+        # İkinci deneme (Fallback): Web creator ve alternatif profil
+        try:
+            fallback_opts = {
+                **opts,
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["android", "web_creator", "mweb", "ios"],
+                    }
+                },
+            }
+            with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                target = query if query.startswith(("http://", "https://")) else f"ytsearch1:{query}"
+                info = ydl.extract_info(target, download=False)
+                if info and "entries" in info and info["entries"]:
+                    info = info["entries"][0]
+                if info:
+                    return {
+                        "title": info.get("title", "Bilinmeyen Şarkı"),
+                        "url": info.get("webpage_url", query),
+                        "duration": info.get("duration", 0),
+                        "duration_str": _format_duration(info.get("duration", 0)),
+                        "thumbnail": info.get("thumbnail", ""),
+                    }
+        except Exception as e2:
+            logger.error(f"YouTube arama hatası ({query}): {e2}")
             return None
 
     loop = asyncio.get_event_loop()
