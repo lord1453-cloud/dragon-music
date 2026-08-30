@@ -97,6 +97,10 @@ async def start_services():
     # Eski indirme dosyalarını temizle
     _cleanup_downloads()
 
+    # 0. Otomatik YouTube Çerez / Oturum Yenileyiciyi Başlat
+    from utils.cookie_manager import start_cookie_refresher, stop_cookie_refresher
+    start_cookie_refresher()
+
     # 1. Bot İstemcisini Başlat
     try:
         logger.info("🤖 Bot istemcisi bağlanıyor...")
@@ -223,6 +227,12 @@ async def stop_services():
             logger.info("🔒 Bot istemcisi kapatıldı.")
         except Exception as e:
             logger.warning(f"Bot kapatılırken hata: {e}")
+
+    try:
+        from utils.cookie_manager import stop_cookie_refresher
+        stop_cookie_refresher()
+    except Exception:
+        pass
 
     _cleanup_downloads()
     logger.info("💤 Ejderha güvenle uykuya daldı.")

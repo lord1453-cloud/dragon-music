@@ -94,43 +94,16 @@ _in_flight_downloads: Dict[str, asyncio.Future] = {}
 _in_flight_lock = asyncio.Lock()
 
 
+from utils.cookie_manager import get_effective_cookiefile, GUEST_COOKIES_FILE, is_user_cookie_valid
+
 # ── 3. Cookie Durum Kontrolü ──────────────────────────────────
 def check_cookies_status(cookie_path: Optional[str] = COOKIES_FILE) -> bool:
-    """
-    cookies.txt dosyasının varlığını kontrol eder.
-    Süresi dolmuş veya bozuksa log'a uyarı yazar.
-    """
-    if not cookie_path or not os.path.exists(cookie_path):
-        return False
-    try:
-        now = time.time()
-        expired_count = 0
-        total_cookies = 0
-        with open(cookie_path, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                parts = line.split("\t")
-                if len(parts) >= 7:
-                    total_cookies += 1
-                    try:
-                        expiry = int(parts[4])
-                        if 0 < expiry < now:
-                            expired_count += 1
-                    except (ValueError, IndexError):
-                        pass
-        if total_cookies > 0 and expired_count >= total_cookies * 0.5:
-            logger.warning("🚨 [UYARI] cookies.txt içindeki çerezlerin çoğunun süresi dolmuş olabilir.")
-            return False
-        return True
-    except Exception as e:
-        logger.debug(f"Cookie kontrol hatası: {e}")
-        return False
+    """Kullanıcının sağladığı cookies.txt dosyasının geçerliliğini kontrol eder."""
+    return is_user_cookie_valid(cookie_path)
 
 
 # ── 4. Temel yt-dlp Yapılandırması ─────────────────────────────
-def _get_base_opts() -> dict:
+def _get_base_opts(cookiefile: Optional[str] = None) -> dict:
     """
     yt-dlp için optimize edilmiş temel yapılandırma.
     Aşırı yüklenmeyi, uzun asılı kalmaları ve gereksiz veri transferini önler.
@@ -155,9 +128,16 @@ def _get_base_opts() -> dict:
         },
     }
 
-    if COOKIES_FILE and os.path.exists(COOKIES_FILE):
-        if check_cookies_status(COOKIES_FILE):
-            opts["cookiefile"] = COOKIES_FILE
+    # Belirtilen veya geçerli olan en uygun çerez dosyasını dahil et
+    chosen_cookie = cookiefile
+    if not chosen_cookie:
+        if is_user_cookie_valid(COOKIES_FILE):
+            chosen_cookie = COOKIES_FILE
+        elif os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 50:
+            chosen_cookie = GUEST_COOKIES_FILE
+
+    if chosen_cookie and os.path.exists(chosen_cookie):
+        opts["cookiefile"] = chosen_cookie
 
     return opts
 
