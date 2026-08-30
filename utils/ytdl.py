@@ -87,22 +87,20 @@ async def search_youtube(query: str) -> Optional[dict]:
     }
 
     def _search():
-        target = query if query.startswith(("http://", "https://")) else f"ytsearch1:{query}"
+        target = query if query.startswith(("http://", "https://")) else f"ytsearch5:{query}"
 
         # 1. Öncelikli arama
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(target, download=False)
                 if info:
-                    entry = None
+                    entries = []
                     if "entries" in info:
-                        entries = list(info["entries"])
-                        if entries and entries[0]:
-                            entry = entries[0]
-                    elif info.get("_type") != "playlist" and info.get("id"):
-                        entry = info
+                        entries = [e for e in info["entries"] if e and e.get("id")]
+                    elif info.get("id"):
+                        entries = [info]
 
-                    if entry and entry.get("id"):
+                    for entry in entries:
                         vid = entry.get("id")
                         title = entry.get("title") or query
                         web_url = entry.get("url") or entry.get("webpage_url") or f"https://www.youtube.com/watch?v={vid}"
@@ -126,22 +124,20 @@ async def search_youtube(query: str) -> Optional[dict]:
                 **opts,
                 "extractor_args": {
                     "youtube": {
-                        "player_client": ["web_creator", "mweb", "android", "ios"],
+                        "player_client": ["android", "ios", "web_creator", "mweb"],
                     }
                 },
             }
             with yt_dlp.YoutubeDL(fallback_opts) as ydl:
                 info = ydl.extract_info(target, download=False)
                 if info:
-                    entry = None
+                    entries = []
                     if "entries" in info:
-                        entries = list(info["entries"])
-                        if entries and entries[0]:
-                            entry = entries[0]
-                    elif info.get("_type") != "playlist" and info.get("id"):
-                        entry = info
+                        entries = [e for e in info["entries"] if e and e.get("id")]
+                    elif info.get("id"):
+                        entries = [info]
 
-                    if entry and entry.get("id"):
+                    for entry in entries:
                         vid = entry.get("id")
                         title = entry.get("title") or query
                         web_url = entry.get("url") or entry.get("webpage_url") or f"https://www.youtube.com/watch?v={vid}"
