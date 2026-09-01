@@ -24,6 +24,7 @@ from utils.ytdl import (
     get_video_file_for_stream,
     cleanup_old_streams,
 )
+from utils.decorators import check_voice_chat
 from bot.plugins.play import make_stream
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,37 @@ async def voice_chat_active(client: Client, chat_id: int) -> bool:
         logger.debug(f"voice_chat_active kontrol uyarısı ({chat_id}): {e}")
         return True
     return False
+
+
+# ── Sesli Sohbete Bağlanma Komutu ──────────────────────────────
+@Client.on_message(filters.command(["join", "baglan", "katil"]) & filters.group)
+async def join_command(client: Client, message: Message):
+    """
+    /join veya /baglan komutu:
+    Sesli sohbete bağlanır ve botu aktif hale getirir.
+    """
+    chat_id = message.chat.id
+    try:
+        chat = await client.get_chat(chat_id)
+        is_vc_open = (
+            getattr(chat, "is_voice_chat_active", False)
+            or getattr(chat, "has_active_voice_chat", False)
+            or getattr(chat, "active_call", None) is not None
+        )
+        if not is_vc_open:
+            await message.reply_text("❌ Grupta aktif bir sesli sohbet bulunamadı! Lütfen önce sesli sohbeti başlatın.")
+            return
+
+        if call_client:
+            active_calls = getattr(call_client, "active_calls", None) or getattr(call_client, "calls", None)
+            if active_calls and ((isinstance(active_calls, dict) and chat_id in active_calls) or (isinstance(active_calls, (list, set, tuple)) and chat_id in active_calls)):
+                await message.reply_text("✅ Bot zaten sesli kanala bağlı durumda!")
+                return
+
+        await message.reply_text("✅ Sesli sohbet hazır! `/play <şarkı_adı>` yazarak müzik başlatabilirsiniz.")
+    except Exception as e:
+        logger.error(f"Join komut hatası: {e}")
+        await message.reply_text(f"❌ Sesli sohbete bağlanırken hata oluştu: {e}")
 
 
 # ── İnteraktif Kontrol Paneli Komutları ────────────────────────
@@ -94,6 +126,7 @@ async def stats_command(client: Client, message: Message):
 
 
 @Client.on_message(filters.command(["duraklat", "pause", "durdur"]) & filters.group)
+@check_voice_chat()
 async def pause_command(client: Client, message: Message):
     """
     /duraklat, /pause veya /durdur komutu.
@@ -114,6 +147,7 @@ async def pause_command(client: Client, message: Message):
 
 
 @Client.on_message(filters.command(["devam", "resume", "baslat"]) & filters.group)
+@check_voice_chat()
 async def resume_command(client: Client, message: Message):
     """
     /devam, /resume veya /baslat komutu.
@@ -134,6 +168,7 @@ async def resume_command(client: Client, message: Message):
 
 
 @Client.on_message(filters.command(["gec", "atla", "skip", "next"]) & filters.group)
+@check_voice_chat()
 async def skip_command(client: Client, message: Message):
     """
     /gec, /atla, /skip veya /next komutu.
@@ -191,6 +226,7 @@ async def skip_command(client: Client, message: Message):
 
 
 @Client.on_message(filters.command(["bitir", "dur", "son", "stop", "kapat", "leave", "ayril"]) & filters.group)
+@check_voice_chat()
 async def stop_command(client: Client, message: Message):
     """
     /bitir, /dur, /son, /stop, /kapat komutu.
@@ -209,6 +245,7 @@ async def stop_command(client: Client, message: Message):
 
 
 @Client.on_message(filters.command(["karistir", "shuffle"]) & filters.group)
+@check_voice_chat()
 async def shuffle_command(client: Client, message: Message):
     """
     /karistir veya /shuffle komutu.
@@ -228,6 +265,7 @@ async def shuffle_command(client: Client, message: Message):
 
 
 @Client.on_message(filters.command(["temizle", "clear", "sirasifirla"]) & filters.group)
+@check_voice_chat()
 async def clear_command(client: Client, message: Message):
     """
     /temizle, /clear veya /sirasifirla komutu.

@@ -44,6 +44,7 @@ from utils.ytdl import (
     YouTubeBotChallengeError,
 )
 from utils.spotify import is_spotify_url, get_spotify_tracks
+from utils.decorators import check_voice_chat
 
 logger = logging.getLogger(__name__)
 
@@ -459,12 +460,14 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
 # ── Komut Kayıtları ───────────────────────────────────────────
 
 @Client.on_message(filters.command(["oynat", "play"]) & filters.group)
+@check_voice_chat()
 async def play_command(client: Client, message: Message):
     """/oynat veya /play: Sesli sohbette müzik çalar."""
     await _process_play(client, message, is_video=False)
 
 
 @Client.on_message(filters.command(["voynat", "vplay", "video"]) & filters.group)
+@check_voice_chat()
 async def vplay_command(client: Client, message: Message):
     """/voynat, /vplay veya /video: Sesli sohbette 720p görüntülü yayın başlatır."""
     await _process_play(client, message, is_video=True)

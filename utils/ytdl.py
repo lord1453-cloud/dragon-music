@@ -120,6 +120,7 @@ def _get_base_opts(cookiefile: Optional[str] = None) -> dict:
         "skip_unavailable_fragments": True,
         "ignoreerrors": False,
         "no_color": True,
+        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "web", "tv"],
@@ -131,7 +132,9 @@ def _get_base_opts(cookiefile: Optional[str] = None) -> dict:
     # Belirtilen veya geçerli olan en uygun çerez dosyasını dahil et
     chosen_cookie = cookiefile
     if not chosen_cookie:
-        if is_user_cookie_valid(COOKIES_FILE):
+        if os.path.exists("/app/cookies.txt") and os.path.getsize("/app/cookies.txt") > 10:
+            chosen_cookie = "/app/cookies.txt"
+        elif is_user_cookie_valid(COOKIES_FILE):
             chosen_cookie = COOKIES_FILE
         elif os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 50:
             chosen_cookie = GUEST_COOKIES_FILE
@@ -178,10 +181,11 @@ def _classify_error(err_str: str) -> Exception:
 async def search_youtube(query: str) -> Optional[dict]:
     """
     YouTube'da şarkı/video arar.
+    - Eğer girdi URL ise doğrudan kullanır.
+    - Metin araması ise 'ytsearch:1:sorgu' formatında ilk sonucu çeker.
     - Önce bellekteki TTL önbelleği kontrol eder.
-    - Tekil sonuç 'ytsearch1:' kullanarak gereksiz API yükünü önler.
     - Geçici hatalarda üstel geri çekilme (exponential backoff) uygular.
-    - YouTube başarısız olursa alternatif arama yapar.
+    - YouTube başarısız olursa alternatif SoundCloud araması yapar.
     """
     query = query.strip()
     if not query:
@@ -195,7 +199,7 @@ async def search_youtube(query: str) -> Optional[dict]:
         return cached
 
     is_direct_url = query.startswith(("http://", "https://"))
-    target = query if is_direct_url else f"ytsearch1:{query}"
+    target = query if is_direct_url else f"ytsearch:1:{query}"
 
     opts = {
         **_get_base_opts(),
@@ -295,31 +299,41 @@ async def search_youtube(query: str) -> Optional[dict]:
 # ── 6. Stream / Audio URL Alma Fonksiyonu ──────────────────────
 async def get_audio_url(query: str) -> Optional[str]:
     """
-    Verilen şarkı adı veya link için doğrudan çalınabilir ses akışı URL'sini alır.
-    - URL ise doğrudan ses akışı URL'sini çıkarır.
-    - Metin araması ise otomatik YouTube araması (ytsearch1:) yapar.
-    - TTL önbellekleme ile performansı maksimize eder.
-    - YouTube hatası veya hız kısıtlamasında SoundCloud yedeğini dener.
-    - Hata yönetimi ve loglama içerir.
+    Verilen şarkı adı veya doğrudan YouTube/medya linki için
+    oynatılabilir doğrudan ses akışı URL'sini alır.
+
+    Çalışma Mantığı:
+    1. Girdi doğrudan URL ise doğrudan kullanılır.
+    2. Girdi arama metni ise 'ytsearch:1:sorgu' ile ilk video sonucu bulunur.
+    3. yt-dlp format tercihi: 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio'.
+    4. Varsa '/app/cookies.txt' veya tanımlı çerez dosyasını otomatik uygular.
+    5. TTL önbellek ile gereksiz istekleri engeller.
+    6. YouTube kısıtlamalarında SoundCloud yedeğini devreye alır.
     """
     query = query.strip()
     if not query:
         return None
 
+    # Önbellek kontrolü
     cache_key = f"audio_url:{query.lower()}"
     cached = await _search_cache.get(cache_key)
     if cached:
         logger.debug(f"⚡ Önbellekten ses URL'si getirildi: {query}")
         return cached
 
+    # URL mi yoksa arama terimi mi kontrolü
     is_direct_url = query.startswith(("http://", "https://"))
-    target = query if is_direct_url else f"ytsearch1:{query}"
+    target = query if is_direct_url else f"ytsearch:1:{query}"
 
     opts = {
         **_get_base_opts(),
-        "format": "bestaudio/best",
+        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
         "skip_download": True,
     }
+
+    # Eğer Docker ortamında /app/cookies.txt varsa öncelikli olarak kullan
+    if os.path.exists("/app/cookies.txt") and os.path.getsize("/app/cookies.txt") > 10:
+        opts["cookiefile"] = "/app/cookies.txt"
 
     def _sync_get_audio_url() -> Optional[str]:
         try:
@@ -348,6 +362,7 @@ async def get_audio_url(query: str) -> Optional[str]:
                     if f.get("url") and (f.get("vcodec") == "none" or "audio" in f.get("mime_type", ""))
                 ]
                 if audio_formats:
+                    # En yüksek bit hızına sahip ses formatını seç
                     audio_formats.sort(key=lambda x: x.get("abr") or x.get("tbr") or 0, reverse=True)
                     return audio_formats[0]["url"]
 
@@ -356,7 +371,7 @@ async def get_audio_url(query: str) -> Optional[str]:
         except Exception as e:
             logger.warning(f"get_audio_url YouTube deneme hatası ({query}): {e}")
 
-        # SoundCloud failover
+        # SoundCloud failover yedeği
         if not is_direct_url:
             try:
                 sc_opts = {
