@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ejderha Bot - Harici Yönetim Paneli</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #07090e;
+            --surface-dark: #0f141f;
+            --card-bg: rgba(18, 24, 38, 0.75);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --primary: #e11d48;
+            --primary-orange: #f97316;
+            --accent-green: #10b981;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dark: #64748b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 10% 10%, rgba(225, 29, 72, 0.12), transparent 35%),
+                radial-gradient(circle at 90% 20%, rgba(249, 115, 22, 0.1), transparent 35%),
+                radial-gradient(circle at 50% 90%, rgba(59, 130, 246, 0.06), transparent 50%);
+            min-height: 100vh;
+            color: var(--text-main);
+            padding-bottom: 60px;
+        }
+
+        /* ── Header & Navbar ────────────────────────────────── */
+        .navbar {
+            background: rgba(15, 20, 31, 0.85);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--card-border);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand .dragon-icon {
+            font-size: 28px;
+            filter: drop-shadow(0 0 10px rgba(225, 29, 72, 0.6));
+        }
+
+        .brand-title {
+            font-size: 20px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff, #f43f5e, #fb923c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.3px;
+        }
+
+        .brand-badge {
+            background: rgba(225, 29, 72, 0.2);
+            border: 1px solid rgba(225, 29, 72, 0.4);
+            color: #fda4af;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 20px;
+            text-transform: uppercase;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-badge.offline {
+            background: rgba(239, 68, 68, 0.12);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: livePulse 1.8s infinite ease-in-out;
+        }
+
+        .status-badge.offline .pulse-dot {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+            animation: none;
+        }
+
+        @keyframes livePulse {
+            0% { transform: scale(0.9); opacity: 0.7; }
+            50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 14px var(--accent-green); }
+            100% { transform: scale(0.9); opacity: 0.7; }
+        }
+
+        .btn-logout {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            color: var(--text-muted);
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        /* ── Container & Grid ────────────────────────────────── */
+        .container {
+            max-width: 1320px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        /* ── Stat Cards ─────────────────────────────────────── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 20px;
+            margin-bottom: 36px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 22px 24px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.25s, box-shadow 0.25s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--card-color, var(--primary)), transparent);
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .stat-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-icon {
+            font-size: 22px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: -0.5px;
+            margin-bottom: 4px;
+        }
+
+        .stat-subtext {
+            font-size: 12px;
+            color: var(--text-dark);
+        }
+
+        /* ── Controls & Filter Bar ──────────────────────────── */
+        .controls-bar {
+            background: var(--surface-dark);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            padding: 16px 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .search-box {
+            position: relative;
+            flex: 1;
+            min-width: 260px;
+        }
+
+        .search-box input {
+            width: 100%;
+            background: rgba(7, 9, 14, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 11px 16px 11px 40px;
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .search-box input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.15);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-dark);
+            font-size: 15px;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .filter-select {
+            background: rgba(7, 9, 14, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 14px;
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 500;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .btn-refresh {
+            background: rgba(225, 29, 72, 0.15);
+            border: 1px solid rgba(225, 29, 72, 0.3);
+            color: #fda4af;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn-refresh:hover {
+            background: var(--primary);
+            color: #ffffff;
+            transform: scale(1.02);
+        }
+
+        /* ── Table & Cards Section ──────────────────────────── */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .table-responsive {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            background: rgba(15, 20, 31, 0.95);
+            padding: 16px 20px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        td {
+            padding: 16px 20px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: middle;
+            transition: background 0.2s;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:hover td {
+            background: rgba(255, 255, 255, 0.025);
+        }
+
+        .group-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .group-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f43f5e, #fb923c);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 16px;
+            color: #ffffff;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3);
+        }
+
+        .group-name {
+            font-weight: 700;
+            color: #ffffff;
+            font-size: 15px;
+            margin-bottom: 2px;
+        }
+
+        .group-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-dark);
+        }
+
+        /* ── Badges ─────────────────────────────────────────── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .badge-supergroup {
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+        }
+
+        .badge-group {
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: #c4b5fd;
+        }
+
+        .badge-channel {
+            background: rgba(249, 115, 22, 0.15);
+            border: 1px solid rgba(249, 115, 22, 0.3);
+            color: #fdba74;
+        }
+
+        .badge-admin {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+        }
+
+        .badge-member {
+            background: rgba(234, 179, 8, 0.15);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            color: #fde047;
+        }
+
+        .owner-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .owner-name {
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .owner-username a {
+            color: var(--primary-orange);
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .owner-username a:hover {
+            text-decoration: underline;
+        }
+
+        .members-count-pill {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: #f8fafc;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 10px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        .empty-state {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            filter: grayscale(0.6);
+        }
+
+        /* ── Responsive ─────────────────────────────────────── */
+        @media (max-width: 900px) {
+            .navbar {
+                padding: 14px 18px;
+            }
+            .container {
+                padding: 20px 14px;
+            }
+            th, td {
+                padding: 12px 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── Navbar ─────────────────────────────────────────── -->
+    <nav class="navbar">
+        <div class="brand">
+            <span class="dragon-icon">🐲</span>
+            <div>
+                <span class="brand-title">EJDERHA PANEL</span>
+                <span class="brand-badge">PRO v{{ bot_version }}</span>
+            </div>
+        </div>
+
+        <div class="nav-actions">
+            <div class="status-badge {% if not bot_online %}offline{% endif %}">
+                <span class="pulse-dot"></span>
+                <span>{% if bot_online %}BOT CANLI (ONLINE){% else %}BOT ÇEVRİMDIŞI{% endif %}</span>
+            </div>
+
+            <a href="/logout" class="btn-logout">Çıkış Yap 🚪</a>
+        </div>
+    </nav>
+
+    <!-- ── Main Container ─────────────────────────────────── -->
+    <div class="container">
+
+        <!-- ── Summary Statistics Cards ───────────────────────── -->
+        <div class="stats-grid">
+            <div class="stat-card" style="--card-color: #e11d48;">
+                <div class="stat-header">
+                    <span class="stat-title">Toplam Sohbet</span>
+                    <span class="stat-icon">📍</span>
+                </div>
+                <div class="stat-value" id="stat-groups">{{ total_groups }}</div>
+                <div class="stat-subtext">Süper grup, grup ve kanallar</div>
+            </div>
+
+            <div class="stat-card" style="--card-color: #3b82f6;">
+                <div class="stat-header">
+                    <span class="stat-title">Toplam Üye Erişimi</span>
+                    <span class="stat-icon">👥</span>
+                </div>
+                <div class="stat-value" id="stat-members">{{ "{:,}".format(total_members) }}</div>
+                <div class="stat-subtext">Tüm gruplardaki toplam kullanıcı</div>
+            </div>
+
+            <div class="stat-card" style="--card-color: #10b981;">
+                <div class="stat-header">
+                    <span class="stat-title">Admin Olunan Gruplar</span>
+                    <span class="stat-icon">🛡️</span>
+                </div>
+                <div class="stat-value" id="stat-admin">{{ admin_groups }}</div>
+                <div class="stat-subtext">Botun yönetici yetkisine sahip olduğu</div>
+            </div>
+
+            <div class="stat-card" style="--card-color: #f97316;">
+                <div class="stat-header">
+                    <span class="stat-title">Son Senkronizasyon</span>
+                    <span class="stat-icon">🕒</span>
+                </div>
+                <div class="stat-value" style="font-size: 16px; margin-top: 10px;" id="stat-sync">
+                    {{ last_sync }}
+                </div>
+                <div class="stat-subtext">Otomatik 6 saatte bir güncellenir</div>
+            </div>
+        </div>
+
+        <!-- ── Controls & Filter Bar ──────────────────────────── -->
+        <div class="controls-bar">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchInput" placeholder="Grup adı, ID veya kurucu ara..." onkeyup="filterTable()">
+            </div>
+
+            <div class="filter-group">
+                <select id="typeFilter" class="filter-select" onchange="filterTable()">
+                    <option value="">Tüm Türler</option>
+                    <option value="supergroup">Süper Gruplar</option>
+                    <option value="group">Normal Gruplar</option>
+                    <option value="channel">Kanallar</option>
+                </select>
+
+                <select id="roleFilter" class="filter-select" onchange="filterTable()">
+                    <option value="">Tüm Yetkiler</option>
+                    <option value="admin">Sadece Adminlikler</option>
+                    <option value="member">Sadece Üye</option>
+                </select>
+
+                <button class="btn-refresh" onclick="refreshData()">
+                    <span>🔄</span> Yenile
+                </button>
+            </div>
+        </div>
+
+        <!-- ── Groups Table ───────────────────────────────────── -->
+        <div class="section-header">
+            <h2 class="section-title">
+                <span>📋</span> Kayıtlı Sohbetler (<span id="visibleCount">{{ groups|length }}</span>)
+            </h2>
+        </div>
+
+        <div class="table-responsive">
+            <table id="groupsTable">
+                <thead>
+                    <tr>
+                        <th>Grup / Sohbet Bilgisi</th>
+                        <th>Tür</th>
+                        <th>Kurucu (Owner)</th>
+                        <th>Bot Yetkisi</th>
+                        <th>Üye Sayısı</th>
+                        <th>Son Tarama</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in groups %}
+                    <tr class="group-row" 
+                        data-type="{{ group.chat_type }}" 
+                        data-role="{{ group.bot_role }}"
+                        data-search="{{ group.title|lower }} {{ group.chat_id }} {{ group.owner_name|lower }} {{ group.owner_username|lower }}">
+                        <td>
+                            <div class="group-meta">
+                                <div class="group-avatar">{{ group.title[:1].upper() if group.title else 'G' }}</div>
+                                <div>
+                                    <div class="group-name">{{ group.title }}</div>
+                                    <div class="group-id">ID: {{ group.chat_id }} {% if group.username %}• @{{ group.username }}{% endif %}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if group.chat_type == 'supergroup' %}
+                            <span class="badge badge-supergroup">Süper Grup</span>
+                            {% elif group.chat_type == 'channel' %}
+                            <span class="badge badge-channel">Kanal</span>
+                            {% else %}
+                            <span class="badge badge-group">Grup</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="owner-info">
+                                <span class="owner-name">{{ group.owner_name or 'Bilinmiyor' }}</span>
+                                {% if group.owner_username %}
+                                <span class="owner-username"><a href="https://t.me/{{ group.owner_username }}" target="_blank">@{{ group.owner_username }}</a></span>
+                                {% elif group.owner_id %}
+                                <span class="group-id">ID: {{ group.owner_id }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            {% if group.is_admin == 1 %}
+                            <span class="badge badge-admin">🛡️ Admin</span>
+                            {% else %}
+                            <span class="badge badge-member">👤 Üye</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="members-count-pill">{{ "{:,}".format(group.members_count or 0) }}</span>
+                        </td>
+                        <td style="font-size: 12px; color: var(--text-muted);">
+                            {{ group.last_sync or '-' }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6">
+                            <div class="empty-state">
+                                <div class="empty-icon">🐲</div>
+                                <h3>Henüz senkronize edilmiş grup bulunamadı!</h3>
+                                <p style="font-size: 13px; margin-top: 6px;">Botunuz Telegram gruplarına eklendikçe veya <code>/sync_groups</code> komutuyla buraya eklenecektir.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <!-- ── Filter & Live Scripts ──────────────────────────── -->
+    <script>
+        function filterTable() {
+            const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
+            const typeVal = document.getElementById('typeFilter').value;
+            const roleVal = document.getElementById('roleFilter').value;
+            const rows = document.querySelectorAll('.group-row');
+
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const searchData = row.getAttribute('data-search') || '';
+                const rowType = row.getAttribute('data-type') || '';
+                const rowRole = row.getAttribute('data-role') || '';
+
+                const matchesSearch = !searchVal || searchData.includes(searchVal);
+                const matchesType = !typeVal || rowType === typeVal;
+                const matchesRole = !roleVal || rowRole === roleVal || (roleVal === 'admin' && row.querySelector('.badge-admin'));
+
+                if (matchesSearch && matchesType && matchesRole) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            document.getElementById('visibleCount').innerText = visibleCount;
+        }
+
+        function refreshData() {
+            window.location.reload();
+        }
+
+        // 30 saniyede bir hafif arka plan senkronizasyonu
+        setInterval(() => {
+            fetch('/api/stats')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        document.getElementById('stat-groups').innerText = data.total_groups;
+                        document.getElementById('stat-members').innerText = data.total_members.toLocaleString();
+                        document.getElementById('stat-admin').innerText = data.admin_groups;
+                        document.getElementById('stat-sync').innerText = data.last_sync;
+                    }
+                })
+                .catch(() => {});
+        }, 30000);
+    </script>
+</body>
+</html>

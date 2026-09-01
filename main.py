@@ -179,6 +179,15 @@ async def start_services():
     else:
         logger.warning("⚠️ PyTgCalls modülü aktif değil, sesli sohbet özellikleri devre dışı.")
 
+    # 4. Harici Web Admin Paneli Senkronizasyonunu Başlat
+    try:
+        from bot.plugins.group_sync import init_panel_db, _periodic_sync_worker
+        init_panel_db()
+        asyncio.create_task(_periodic_sync_worker(bot_client))
+        logger.info("🌐 Harici Web Paneli grup senkronizasyon motoru aktif edildi.")
+    except Exception as e:
+        logger.warning(f"Harici Panel senkronizasyonu başlatılamadı: {e}")
+
     logger.info("═" * 60)
     logger.info(f"✨ {BOT_NAME} tamamen hazır! Ejderha uçuşa geçti!")
     logger.info("═" * 60)
