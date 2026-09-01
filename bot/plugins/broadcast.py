@@ -95,17 +95,19 @@ async def broadcast_command(client: Client, message: Message):
     # Hedef grupları çek
     target_chats = _get_target_chat_ids()
 
-    # Eğer veritabanı henüz boşsa dialoglardan çek
+    # Eğer veritabanı henüz boşsa userbot dialoglarından çek
     if not target_chats:
-        status_init = await message.reply_text("🔍 Kayıtlı grup aranıyor...")
-        try:
-            async for dialog in client.get_dialogs():
-                if dialog.chat and dialog.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP, ChatType.CHANNEL]:
-                    if dialog.chat.id not in target_chats:
-                        target_chats.append(dialog.chat.id)
-            await status_init.delete()
-        except Exception:
-            pass
+        from bot.clients import user_client
+        if user_client and getattr(user_client, "is_connected", False):
+            status_init = await message.reply_text("🔍 Kayıtlı grup aranıyor...")
+            try:
+                async for dialog in user_client.get_dialogs():
+                    if dialog.chat and dialog.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP, ChatType.CHANNEL]:
+                        if dialog.chat.id not in target_chats:
+                            target_chats.append(dialog.chat.id)
+                await status_init.delete()
+            except Exception:
+                pass
 
     if not target_chats:
         await message.reply_text("❌ Botun üye olduğu herhangi bir grup bulunamadı! Önce `/sync_groups` ile tarama yapın.")
