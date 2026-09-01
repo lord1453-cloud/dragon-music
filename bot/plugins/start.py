@@ -76,22 +76,27 @@ async def settings_command(client: Client, message: Message):
     )
 
 
+from bot.config import ADMIN_IDS
+from bot.theme import (
+    WELCOME_TEXT, SETTINGS_TEXT, COMMANDS_TEXT, DEVELOPER_TEXT,
+    get_main_menu_keyboard, get_back_button, get_dev_keyboard, get_help_keyboard,
+)
+
 # ── /yardim, /help, /komutlar Komutları ───────────────────────
 @Client.on_message(filters.command(["yardim", "help", "komutlar", "commands"]))
 async def help_command(client: Client, message: Message):
     """
-    /yardim veya /help komutu:
-    Kullanılabilir tüm bot komutlarını listeler.
+    /yardim, /komutlar, /help komutu:
+    Kullanılabilir tüm bot komutlarını kategorili tablo formatında listeler.
     Hem DM hem de gruplarda çalışır.
     """
-    chat_type = "DM" if message.chat.type.value == "private" else "Grup"
-    user_id = message.from_user.id if message.from_user else "?"
-    logger.info(f"📥 /yardim komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_id}]")
+    user_id = message.from_user.id if message.from_user else 0
+    is_admin = bool(ADMIN_IDS and user_id in ADMIN_IDS)
 
     await _safe_reply(
         message,
         text=COMMANDS_TEXT,
-        reply_markup=get_back_button(),
+        reply_markup=get_help_keyboard(is_admin=is_admin),
     )
 
 

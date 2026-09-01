@@ -51,58 +51,132 @@ efsanevi bir yaratığım! {VOLCANO}
 """
 
 # ── Menü Metinleri ────────────────────────────────────────────
-COMMANDS_TEXT = f"""
-{SCROLL} **EJDERHA KOMUTLARI** {SCROLL}
-━━━━━━━━━━━━━━━━━━━━━━━━
+# ── Menü Metinleri (Tablolu Komut Rehberi) ─────────────────────
+COMMANDS_TEXT = """
+╔══════════════════════════════════════════╗
+║        🐲 EJDERHA KOMUT REHBERİ 🐲       ║
+╚══════════════════════════════════════════╝
 
-{FIRE} `/oynat` veya `/play <şarkı adı / Spotify linki / YouTube linki>`
-↳ Ejderha müziği sesli sohbette ateşler! Çalıyorsa sıraya ekler.
+🎵 ─── [ MÜZİK & VİDEO KOMUTLARI ] ───
+┌──────────────────┬───────────────────────┐
+│ Komut            │ Açıklama              │
+├──────────────────┼───────────────────────┤
+│ /play <şarkı/url>│ Müziği başlatır       │
+│ /vplay <isim/url>│ 720p HD video yayını  │
+│ /pause           │ Yayını duraklatır     │
+│ /resume          │ Yayına devam eder     │
+│ /skip            │ Sıradaki parçaya geçer│
+│ /stop            │ Yayını sonlandırır    │
+│ /queue           │ Sıra listesini açar   │
+│ /shuffle         │ Sırayı karıştırır     │
+│ /clear           │ Sırayı temizler       │
+│ /join            │ Sesli kanala bağlanır │
+│ /indir <şarkı>   │ 320kbps MP3 indirir   │
+└──────────────────┴───────────────────────┘
 
-{VIDEO} `/voynat` veya `/vplay` veya `/video <video adı veya link>`
-↳ Ejderha görüntülü yayını (720p HD) başlatır!
+🥊 ─── [ EĞLENCE & SOSYAL ] ──────────
+┌──────────────────┬───────────────────────┐
+│ Komut            │ Açıklama              │
+├──────────────────┼───────────────────────┤
+│ /slap [@üye]     │ Hedefe GIF'li tokat   │
+│ /slapboard       │ Tokat liderlik tablosu│
+│ /ship [@1] [@2]  │ Aşk & uyum falı ölçer │
+│ /sosyal          │ Sosyal eğlence menüsü │
+└──────────────────┴───────────────────────┘
 
-{SPOTIFY} **Spotify Link Desteği:**
-↳ Tekli şarkı, albüm veya çalma listesi linklerini `/oynat` ile atabilirsiniz.
+📊 ─── [ AKTİFLİK & SIRALAMA ] ────────
+┌──────────────────┬───────────────────────┐
+│ Komut            │ Açıklama              │
+├──────────────────┼───────────────────────┤
+│ /mesajlar        │ Günlük mesaj kralları │
+│ /gruprapor       │ Grubun detaylı raporu │
+│ /ejderha         │ Günün Gerçek Ejderhası│
+│ /aktiflik        │ Mesaj istatistikleri  │
+└──────────────────┴───────────────────────┘
 
-{PAUSE} `/duraklat` veya `/pause`
-↳ Ejderha nefesini tutar, yayın durur.
+⚙️ ─── [ ÖZEL FİLTRELER ] ─────────────
+┌──────────────────┬───────────────────────┐
+│ Komut            │ Açıklama              │
+├──────────────────┼───────────────────────┤
+│ /filter <k> <c>  │ Otomatik cevap ekler  │
+│ /stop <kelime>   │ Filtreyi siler        │
+│ /filters         │ Aktif filtre listesi  │
+│ /stopall         │ Tüm filtreleri siler  │
+└──────────────────┴───────────────────────┘
 
-{PLAY} `/devam` veya `/resume`
-↳ Ejderha tekrar kükreyerek yayına devam eder!
+✨ *Aşağıdaki butonları kullanarak kategori bazında inceleyebilirsiniz.*
+"""
 
-{SKIP} `/gec` veya `/atla` veya `/skip`
-↳ Ejderha sıradaki parçaya/videoya kanat çırpar.
+HELP_MUSIC_TEXT = """
+🎵 ─── [ MÜZİK & VİDEO KOMUTLARI ] ───
+┌──────────────────┬───────────────────────┐
+│ Komut            │ Açıklama              │
+├──────────────────┼───────────────────────┤
+│ /play <şarkı/url>│ Müziği başlatır       │
+│ /vplay <isim/url>│ 720p HD video yayını  │
+│ /pause           │ Yayını duraklatır     │
+│ /resume          │ Yayına devam eder     │
+│ /skip            │ Sıradaki parçaya geçer│
+│ /stop            │ Yayını sonlandırır    │
+│ /queue           │ Sıra listesini açar   │
+│ /shuffle         │ Sırayı karıştırır     │
+│ /clear           │ Sırayı temizler       │
+│ /join            │ Sesli kanala bağlanır │
+│ /indir <şarkı>   │ 320kbps MP3 indirir   │
+└──────────────────┴───────────────────────┘
+🎧 *Spotify (şarkı, albüm, playlist) ve YouTube linkleri tam desteklenir.*
+"""
 
-🛑 `/bitir` veya `/dur` veya `/stop`
-↳ Yayını durdurur, kuyruğu temizler ve sohbetten ayrılır.
+HELP_FUN_TEXT = """
+🥊 ─── [ EĞLENCE & SOSYAL ] ──────────
+┌──────────────────┬───────────────────────┐
+│ Komut            │ Açıklama              │
+├──────────────────┼───────────────────────┤
+│ /slap [@üye]     │ Hedefe GIF'li tokat   │
+│ /slapboard       │ Tokat liderlik tablosu│
+│ /ship [@1] [@2]  │ Aşk & uyum falı ölçer │
+│ /sosyal          │ Sosyal eğlence menüsü │
+└──────────────────┴───────────────────────┘
+🔥 *15 farklı hareketli GIF ile grupta eğlenceli anlar yaşayın!*
+"""
 
-🔀 `/karistir` veya `/shuffle`
-↳ Kuyruktaki şarkıları rastgele karıştırır.
+HELP_ACTIVITY_TEXT = """
+📊 ─── [ AKTİFLİK & SIRALAMA ] ────────
+┌──────────────────┬───────────────────────┐
+│ Komut            │ Açıklama              │
+├──────────────────┼───────────────────────┤
+│ /mesajlar        │ Günlük mesaj kralları │
+│ /gruprapor       │ Grubun detaylı raporu │
+│ /ejderha         │ Günün Gerçek Ejderhası│
+│ /aktiflik        │ Mesaj istatistikleri  │
+└──────────────────┴───────────────────────┘
+👑 *Günün en çok mesaj atan üyesine özel 'GERÇEK EJDERHA' ünvanı verilir!*
+"""
 
-🧹 `/temizle` veya `/clear`
-↳ Sıradaki tüm bekleyen parçaları temizler.
+HELP_FILTERS_TEXT = """
+⚙️ ─── [ ÖZEL FİLTRELER ] ─────────────
+┌──────────────────┬───────────────────────┐
+│ Komut            │ Açıklama              │
+├──────────────────┼───────────────────────┤
+│ /filter <k> <c>  │ Otomatik cevap ekler  │
+│ /stop <kelime>   │ Filtreyi siler        │
+│ /filters         │ Aktif filtre listesi  │
+│ /stopall         │ Tüm filtreleri siler  │
+└──────────────────┴───────────────────────┘
+🛡️ *Grubunuzda belirlediğiniz kelimelere bot otomatik cevap verir.*
+"""
 
-{QUEUE} `/sira` veya `/queue`
-↳ Ejderhanın müzik kuyruğunu gösterir.
-
-{DOWNLOAD} `/indir <şarkı adı veya link>`
-↳ Ejderha şarkıyı MP3 olarak pençeleriyle kapar!
-
-🎛️ `/panel` veya `/kontrol`
-↳ İnteraktif ve canlı Kontrol Panelini açar.
-
-📊 `/stats` veya `/durum`
-↳ Canlı CPU, RAM ve sistem istatistiklerini gösterir.
-
-👋 `/tokat` veya `/slap [@kullanıcı]`
-↳ Şaka amaçlı tokat atar veya gruptan rastgele birini tokatlar! (GIF'li)
-
-💘 `/ship` veya `/ask [@kullanıcı1] [@kullanıcı2]`
-↳ İki kullanıcı arasındaki aşk ve uyum yüzdesini ölçer!
-
-{MUSIC} `/menu`
-↳ Ana menüyü tekrar çağırır.
-━━━━━━━━━━━━━━━━━━━━━━━━
+HELP_ADMIN_TEXT = """
+👑 ─── [ YÖNETİCİ KOMUTLARI ] ─────────
+┌──────────────────┬───────────────────────┐
+│ Komut            │ Açıklama              │
+├──────────────────┼───────────────────────┤
+│ /broadcast <msg> │ Tüm gruplara duyuru   │
+│ /sync_groups     │ Web panel senkronize  │
+│ /panel           │ Kontrol panelini açar │
+│ /stats           │ Sistem kaynak durumu  │
+└──────────────────┴───────────────────────┘
+🔒 *Bu komutlar yalnızca ADMIN_IDS yetkisine sahip bot sahipleri içindir.*
 """
 
 DOWNLOAD_HELP_TEXT = f"""
@@ -399,6 +473,35 @@ def get_dev_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
         ],
     ])
+
+def get_help_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
+    """Komut rehberi için sekmeli ve kategorili gezinme butonları."""
+    buttons = [
+        [
+            InlineKeyboardButton("🎵 Müzik & Video", callback_data="help_music"),
+            InlineKeyboardButton("🥊 Eğlence & Sosyal", callback_data="help_fun"),
+        ],
+        [
+            InlineKeyboardButton("📊 Aktivite & Rapor", callback_data="help_activity"),
+            InlineKeyboardButton("⚙️ Özel Filtreler", callback_data="help_filters"),
+        ],
+    ]
+    if is_admin:
+        buttons.append([
+            InlineKeyboardButton("👑 Yönetici Komutları", callback_data="help_admin"),
+            InlineKeyboardButton("📋 Tüm Tablo", callback_data="help_all"),
+        ])
+    else:
+        buttons.append([
+            InlineKeyboardButton("📋 Tüm Tablo", callback_data="help_all"),
+        ])
+
+    buttons.append([
+        InlineKeyboardButton("🎛️ Kontrol Paneli", callback_data="ctrl_panel"),
+        InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
+    ])
+    return InlineKeyboardMarkup(buttons)
+
 
 def get_back_button() -> InlineKeyboardMarkup:
     """Geri butonu döndürür."""

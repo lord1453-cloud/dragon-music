@@ -59,11 +59,16 @@ async def menu_callback(client: Client, callback: CallbackQuery):
     data = callback.data
     logger.info(f"🔘 Menü butonu: {data} - Kullanıcı: {callback.from_user.id if callback.from_user else '?'}")
 
+    user_id = callback.from_user.id if callback.from_user else 0
+    from bot.config import ADMIN_IDS
+    from bot.theme import get_help_keyboard
+    is_admin = bool(ADMIN_IDS and user_id in ADMIN_IDS)
+
     try:
         if data == "menu_main":
             await _safe_edit(callback, text=WELCOME_TEXT, reply_markup=get_main_menu_keyboard())
         elif data == "menu_commands":
-            await _safe_edit(callback, text=COMMANDS_TEXT, reply_markup=get_back_button())
+            await _safe_edit(callback, text=COMMANDS_TEXT, reply_markup=get_help_keyboard(is_admin=is_admin))
         elif data == "menu_download":
             await _safe_edit(callback, text=DOWNLOAD_HELP_TEXT, reply_markup=get_back_button())
         elif data == "menu_settings":
@@ -80,6 +85,38 @@ async def menu_callback(client: Client, callback: CallbackQuery):
             await callback.answer()
         except Exception:
             pass
+
+
+# ── 1.5. Komut Rehberi Sekme Callback'leri (help_*) ───────────
+@Client.on_callback_query(filters.regex(r"^help_"))
+async def help_tabs_callback(client: Client, callback: CallbackQuery):
+    """Komut tablosu kategorileri arasında gezinmeyi sağlar."""
+    data = callback.data
+    user_id = callback.from_user.id if callback.from_user else 0
+
+    from bot.config import ADMIN_IDS
+    from bot.theme import (
+        COMMANDS_TEXT, HELP_MUSIC_TEXT, HELP_FUN_TEXT,
+        HELP_ACTIVITY_TEXT, HELP_FILTERS_TEXT, HELP_ADMIN_TEXT,
+        get_help_keyboard,
+    )
+    is_admin = bool(ADMIN_IDS and user_id in ADMIN_IDS)
+
+    text_map = {
+        "help_all": COMMANDS_TEXT,
+        "help_music": HELP_MUSIC_TEXT,
+        "help_fun": HELP_FUN_TEXT,
+        "help_activity": HELP_ACTIVITY_TEXT,
+        "help_filters": HELP_FILTERS_TEXT,
+        "help_admin": HELP_ADMIN_TEXT if is_admin else COMMANDS_TEXT,
+    }
+    selected_text = text_map.get(data, COMMANDS_TEXT)
+
+    try:
+        await _safe_edit(callback, text=selected_text, reply_markup=get_help_keyboard(is_admin=is_admin))
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"help_tabs_callback hatası: {e}")
 
 
 # ── 2. İnteraktif Kontrol Paneli ve Oynatıcı (ctrl_*) ──────────
