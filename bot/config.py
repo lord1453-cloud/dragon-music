@@ -69,6 +69,10 @@ for _cp in _possible_cookie_paths:
 SPOTIFY_CLIENT_ID: Optional[str] = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET: Optional[str] = os.getenv("SPOTIFY_CLIENT_SECRET")
 
+# Yönetici ID Listesi (ADMIN_IDS)
+_admins_raw = os.getenv("ADMIN_IDS") or os.getenv("ADMINS") or os.getenv("OWNER_ID") or ""
+ADMIN_IDS: list = [int(x.strip()) for x in _admins_raw.replace(";", ",").replace(" ", ",").split(",") if x.strip().lstrip("-").isdigit()]
+
 # ── Sabit Değerler ───────────────────────────────────────────
 BOT_NAME: str = "🐲 Ejderha Müzik Botu"
 BOT_VERSION: str = "1.2.0"

@@ -3,7 +3,7 @@
 # ============================================
 # Botun üye olduğu tüm gruplara tek seferde mesaj,
 # medya, fotoğraf, video veya butonlu duyuru gönderir.
-# FloodWait koruması ve detaylı raporlama içerir.
+# FloodWait koruması ve ADMIN_IDS yetki kontrolü içerir.
 
 import os
 import time
@@ -25,7 +25,8 @@ from pyrogram.errors import (
 )
 from pyrogram.enums import ChatType
 
-from bot.config import OWNER_ID, BOT_TOKEN
+# bot.config'den ADMIN_IDS çekilir, BOT_TOKEN os.getenv ile güvenli alınır
+from bot.config import ADMIN_IDS
 from bot.plugins.group_sync import DB_PATH, init_panel_db
 
 logger = logging.getLogger(__name__)
@@ -47,18 +48,17 @@ def _get_target_chat_ids() -> List[int]:
 
 
 async def _is_authorized(client: Client, message: Message) -> bool:
-    """Yalnızca bot sahibinin veya yetkilendirilmiş yöneticinin duyuru yapmasını sağlar."""
+    """Yalnızca ADMIN_IDS listesindeki yetkili yöneticilerin duyuru yapmasını sağlar."""
     user = message.from_user
     if not user:
         return False
 
-    # 1. OWNER_ID tanımlıysa kontrol et
-    if OWNER_ID and user.id == OWNER_ID:
+    # 1. ADMIN_IDS listesinde tanımlıysa izin ver
+    if ADMIN_IDS and user.id in ADMIN_IDS:
         return True
 
-    # 2. Varsayılan olarak özel mesajda veya bot sahibiyse izin ver
-    # Eğer OWNER_ID henüz girilmediyse komutu kullanan ilk kişiye uyararak izin verebiliriz
-    if not OWNER_ID:
+    # 2. Eğer ADMIN_IDS boş bırakılmışsa DM veya kurucuya esneklik sağla
+    if not ADMIN_IDS:
         return True
 
     return False
@@ -74,7 +74,7 @@ async def broadcast_command(client: Client, message: Message):
     Botun bulunduğu tüm gruplara duyuruyu güvenli şekilde iletir.
     """
     if not await _is_authorized(client, message):
-        await message.reply_text("❌ Bu komutu yalnızca bot kurucusu kullanabilir!")
+        await message.reply_text("❌ Bu komutu yalnızca yetkili bot yöneticileri (`ADMIN_IDS`) kullanabilir!")
         return
 
     # Gönderilecek içeriği belirle
@@ -125,6 +125,15 @@ async def broadcast_command(client: Client, message: Message):
         f"⏳ Gönderiliyor: `[ 0 / {total_targets} ]`"
     )
 
+    formatted_announcement = ""
+    if broadcast_text:
+        formatted_announcement = (
+            f"🐲 **EJDERHA RESMİ DUYURU** 🐲\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{broadcast_text}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
+
     for idx, chat_id in enumerate(target_chats, start=1):
         try:
             # 1. Yanıtlanan bir mesaj varsa (Fotoğraf, Medya, Buton, vb. kopyala)
@@ -132,12 +141,6 @@ async def broadcast_command(client: Client, message: Message):
                 await message.reply_to_message.copy(chat_id)
             # 2. Düz metin varsa
             else:
-                formatted_announcement = (
-                    f"🐲 **EJDERHA RESMİ DUYURU** 🐲\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"{broadcast_text}\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━"
-                )
                 await client.send_message(chat_id, formatted_announcement)
 
             success_count += 1
