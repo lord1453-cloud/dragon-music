@@ -220,6 +220,70 @@ def api_stats():
     })
 
 
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+
+
+@app.route("/api/broadcast", methods=["POST"])
+@login_required
+def api_broadcast():
+    """Web panelinden tüm gruplara doğrudan toplu duyuru gönderir."""
+    import json
+    import urllib.request
+    import time
+
+    data = request.get_json() or {}
+    message_text = data.get("message", "").strip()
+
+    if not message_text:
+        return jsonify({"status": "error", "message": "Duyuru metni boş olamaz!"}), 400
+
+    if not BOT_TOKEN:
+        return jsonify({"status": "error", "message": "BOT_TOKEN .env dosyasında bulunamadı!"}), 500
+
+    groups = get_all_groups()
+    if not groups:
+        return jsonify({"status": "error", "message": "Veritabanında kayıtlı grup bulunamadı!"}), 404
+
+    formatted_text = f"🐲 **EJDERHA RESMİ DUYURU** 🐲\n━━━━━━━━━━━━━━━━━━━━━━━━\n{message_text}\n━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    success_count = 0
+    failed_count = 0
+    api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+    for group in groups:
+        chat_id = group.get("chat_id")
+        if not chat_id:
+            continue
+
+        payload = {
+            "chat_id": chat_id,
+            "text": formatted_text,
+            "parse_mode": "Markdown",
+        }
+        try:
+            req = urllib.request.Request(
+                api_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                    success_count += 1
+                else:
+                    failed_count += 1
+        except Exception:
+            failed_count += 1
+
+        time.sleep(0.08)
+
+    return jsonify({
+        "status": "success",
+        "total": len(groups),
+        "success_count": success_count,
+        "failed_count": failed_count,
+    })
+
+
 # ── Başlatıcı ────────────────────────────────────────────────
 if __name__ == "__main__":
     init_db_if_needed()
