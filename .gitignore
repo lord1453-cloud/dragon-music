@@ -7,3 +7,5 @@ __pycache__/
 .cache/
 downloads/
 guest_cookies.txt
+data/*.json
+!data/.gitkeep
