@@ -88,6 +88,28 @@ def make_stream(file_path: str, is_video: bool = False) -> MediaStream:
         return _make_audio_stream(file_path)
 
 
+async def voice_chat_active(client: Client, chat_id: int) -> bool:
+    """
+    Grubun sesli sohbetinin aktif olup olmadığını kontrol eder.
+    """
+    try:
+        if call_client:
+            active_calls = getattr(call_client, "active_calls", None) or getattr(call_client, "calls", None)
+            if active_calls is not None:
+                if isinstance(active_calls, dict) and chat_id in active_calls:
+                    return True
+                elif isinstance(active_calls, (list, set, tuple)) and chat_id in active_calls:
+                    return True
+
+        chat = await client.get_chat(chat_id)
+        if getattr(chat, "is_voice_chat_active", False) or getattr(chat, "has_active_voice_chat", False) or getattr(chat, "active_call", None) is not None:
+            return True
+    except Exception as e:
+        logger.debug(f"voice_chat_active uyarısı ({chat_id}): {e}")
+        return True
+    return False
+
+
 async def _prefetch_next(chat_id: int):
     """
     Kuyruktaki sıradaki parçayı arka planda indirir.

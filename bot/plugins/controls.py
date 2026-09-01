@@ -14,7 +14,7 @@ from bot.clients import call_client
 from bot.theme import (
     msg_paused, msg_resumed, msg_skipped,
     msg_stopped, msg_shuffled, msg_queue_cleared,
-    msg_not_playing, msg_error,
+    msg_not_playing, msg_no_voice_chat, msg_error,
     get_panel_text, get_panel_keyboard, get_player_keyboard,
     get_system_stats_text, get_stats_keyboard,
 )
@@ -27,6 +27,29 @@ from utils.ytdl import (
 from bot.plugins.play import make_stream
 
 logger = logging.getLogger(__name__)
+
+
+async def voice_chat_active(client: Client, chat_id: int) -> bool:
+    """
+    Grubun sesli sohbetinin (Group Call) aktif olup olmadığını kontrol eder.
+    PyTgCalls veya Pyrogram üzerinden aktif çağrıyı doğrular.
+    """
+    try:
+        if call_client:
+            active_calls = getattr(call_client, "active_calls", None) or getattr(call_client, "calls", None)
+            if active_calls is not None:
+                if isinstance(active_calls, dict) and chat_id in active_calls:
+                    return True
+                elif isinstance(active_calls, (list, set, tuple)) and chat_id in active_calls:
+                    return True
+
+        chat = await client.get_chat(chat_id)
+        if getattr(chat, "is_voice_chat_active", False) or getattr(chat, "has_active_voice_chat", False) or getattr(chat, "active_call", None) is not None:
+            return True
+    except Exception as e:
+        logger.debug(f"voice_chat_active kontrol uyarısı ({chat_id}): {e}")
+        return True
+    return False
 
 
 # ── İnteraktif Kontrol Paneli Komutları ────────────────────────

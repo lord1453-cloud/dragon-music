@@ -292,26 +292,103 @@ async def search_youtube(query: str) -> Optional[dict]:
     return None
 
 
-# ── 6. Stream URL Alma Fonksiyonu ──────────────────────────────
-async def get_stream_url(url: str) -> Optional[str]:
-    """Doğrudan ses akışı URL'sini (direkt link) çeker."""
+# ── 6. Stream / Audio URL Alma Fonksiyonu ──────────────────────
+async def get_audio_url(query: str) -> Optional[str]:
+    """
+    Verilen şarkı adı veya link için doğrudan çalınabilir ses akışı URL'sini alır.
+    - URL ise doğrudan ses akışı URL'sini çıkarır.
+    - Metin araması ise otomatik YouTube araması (ytsearch1:) yapar.
+    - TTL önbellekleme ile performansı maksimize eder.
+    - YouTube hatası veya hız kısıtlamasında SoundCloud yedeğini dener.
+    - Hata yönetimi ve loglama içerir.
+    """
+    query = query.strip()
+    if not query:
+        return None
+
+    cache_key = f"audio_url:{query.lower()}"
+    cached = await _search_cache.get(cache_key)
+    if cached:
+        logger.debug(f"⚡ Önbellekten ses URL'si getirildi: {query}")
+        return cached
+
+    is_direct_url = query.startswith(("http://", "https://"))
+    target = query if is_direct_url else f"ytsearch1:{query}"
+
     opts = {
         **_get_base_opts(),
         "format": "bestaudio/best",
+        "skip_download": True,
     }
 
-    def _extract():
+    def _sync_get_audio_url() -> Optional[str]:
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                if info:
-                    return info.get("url")
+                info = ydl.extract_info(target, download=False)
+                if not info:
+                    return None
+
+                entries = []
+                if "entries" in info and info["entries"]:
+                    entries = [e for e in info["entries"] if e]
+                elif info:
+                    entries = [info]
+
+                if not entries:
+                    return None
+
+                entry = entries[0]
+                direct_url = entry.get("url")
+                if direct_url and str(direct_url).startswith("http"):
+                    return direct_url
+
+                formats = entry.get("formats", [])
+                audio_formats = [
+                    f for f in formats
+                    if f.get("url") and (f.get("vcodec") == "none" or "audio" in f.get("mime_type", ""))
+                ]
+                if audio_formats:
+                    audio_formats.sort(key=lambda x: x.get("abr") or x.get("tbr") or 0, reverse=True)
+                    return audio_formats[0]["url"]
+
+                if formats:
+                    return formats[-1].get("url")
         except Exception as e:
-            logger.error(f"Stream URL çekme hatası ({url}): {e}")
+            logger.warning(f"get_audio_url YouTube deneme hatası ({query}): {e}")
+
+        # SoundCloud failover
+        if not is_direct_url:
+            try:
+                sc_opts = {
+                    **_get_base_opts(),
+                    "format": "bestaudio/best",
+                    "skip_download": True,
+                }
+                with yt_dlp.YoutubeDL(sc_opts) as ydl:
+                    info = ydl.extract_info(f"scsearch1:{query}", download=False)
+                    if info and "entries" in info and info["entries"]:
+                        entry = info["entries"][0]
+                        if entry and entry.get("url"):
+                            return entry.get("url")
+            except Exception as sc_err:
+                logger.debug(f"get_audio_url SoundCloud yedeği hatası: {sc_err}")
+
         return None
 
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(_executor, _extract)
+    try:
+        audio_url = await loop.run_in_executor(_executor, _sync_get_audio_url)
+        if audio_url:
+            await _search_cache.set(cache_key, audio_url)
+            return audio_url
+    except Exception as e:
+        logger.error(f"get_audio_url genel hatası: {e}")
+    return None
+
+
+async def get_stream_url(url: str) -> Optional[str]:
+    """Doğrudan ses akışı URL'sini (direkt link) çeker."""
+    return await get_audio_url(url)
 
 
 # ── 7. MP3 Olarak İndirme Fonksiyonu (/indir için) ───────────────

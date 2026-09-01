@@ -94,6 +94,12 @@ COMMANDS_TEXT = f"""
 📊 `/stats` veya `/durum`
 ↳ Canlı CPU, RAM ve sistem istatistiklerini gösterir.
 
+👋 `/tokat` veya `/slap [@kullanıcı]`
+↳ Şaka amaçlı tokat atar veya gruptan rastgele birini tokatlar! (GIF'li)
+
+💘 `/ship` veya `/ask [@kullanıcı1] [@kullanıcı2]`
+↳ İki kullanıcı arasındaki aşk ve uyum yüzdesini ölçer!
+
 {MUSIC} `/menu`
 ↳ Ana menüyü tekrar çağırır.
 ━━━━━━━━━━━━━━━━━━━━━━━━
