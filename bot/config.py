@@ -71,7 +71,7 @@ SPOTIFY_CLIENT_SECRET: Optional[str] = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 # ── Sabit Değerler ───────────────────────────────────────────
 BOT_NAME: str = "🐲 Ejderha Müzik Botu"
-BOT_VERSION: str = "1.1.0"
+BOT_VERSION: str = "1.2.0"
 DOWNLOADS_DIR: str = os.path.join(_base_dir, "downloads")
 
 # İndirme klasörünü oluştur
