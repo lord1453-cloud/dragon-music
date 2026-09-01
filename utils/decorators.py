@@ -64,7 +64,7 @@ def check_voice_chat() -> Callable:
 
             # 4. Sesli kanal aktif değilse komutu durdur ve uyar
             if not is_active:
-                await message.reply_text("❌ Sesli kanal aktif değil. Önce /join ile bağlan.")
+                await message.reply_text("❌ Sesli kanal aktif değil! Lütfen grupta sesli sohbet başlatın.")
                 return None
 
             return await func(client, message, *args, **kwargs)

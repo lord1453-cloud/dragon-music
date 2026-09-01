@@ -70,7 +70,6 @@ COMMANDS_TEXT = """
 │ /queue           │ Sıra listesini açar   │
 │ /shuffle         │ Sırayı karıştırır     │
 │ /clear           │ Sırayı temizler       │
-│ /join            │ Sesli kanala bağlanır │
 │ /indir <şarkı>   │ 320kbps MP3 indirir   │
 └──────────────────┴───────────────────────┘
 
@@ -121,7 +120,6 @@ HELP_MUSIC_TEXT = """
 │ /queue           │ Sıra listesini açar   │
 │ /shuffle         │ Sırayı karıştırır     │
 │ /clear           │ Sırayı temizler       │
-│ /join            │ Sesli kanala bağlanır │
 │ /indir <şarkı>   │ 320kbps MP3 indirir   │
 └──────────────────┴───────────────────────┘
 🎧 *Spotify (şarkı, albüm, playlist) ve YouTube linkleri tam desteklenir.*

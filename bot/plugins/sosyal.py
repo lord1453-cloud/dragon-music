@@ -1,10 +1,15 @@
 # ============================================
-# 🐲 Ejderha Müzik Botu - Sosyal Menü Modülü
+# 🐲 Ejderha Müzik Botu - Zengin Sosyal & Eğlence Modülü
 # ============================================
-# /sosyal komutu ile interaktif eğlence, aktiflik,
-# tokat, aşk ölçer, filtre ve grup raporu menüsünü sunar.
+# /sosyal menüsü, zar atma, kahve falı, şans ölçer,
+# fıkra, şiir, hayvan GIF'leri, yıldız falı ve iltifat komutları.
+# Tüm komutlar hareketli ve çalışan GIF'lerle zenginleştirilmiştir.
 
+import os
+import random
 import logging
+from typing import Optional
+
 from pyrogram import Client, filters
 from pyrogram.types import (
     Message,
@@ -23,64 +28,146 @@ from bot.plugins.fun import _load_slap_stats
 
 logger = logging.getLogger(__name__)
 
-# ── Sosyal Menü Metni ─────────────────────────────────────────
+
+# ── ÇALIŞAN SABİT GIF VE ANİMASYON CDN LİNKLERİ ──────────────
+GIFS = {
+    "dice": "https://media.giphy.com/media/3oriO04qxVReM5rJEA/giphy.gif",
+    "coffee": "https://media.giphy.com/media/3oriO13KTkzPwTykp2/giphy.gif",
+    "luck": "https://media.giphy.com/media/l41JGlwa1xY7Btxfs/giphy.gif",
+    "joke": "https://media.giphy.com/media/10JhviFuU2gWD6/giphy.gif",
+    "poetry": "https://media.giphy.com/media/26FPy3QZLnLCy5Ip2/giphy.gif",
+    "weather_sun": "https://media.giphy.com/media/u01ioCe6G8URG/giphy.gif",
+    "weather_rain": "https://media.giphy.com/media/t7Qb8655Z1V9K/giphy.gif",
+    "star": "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif",
+    "compliment": "https://media.giphy.com/media/M90mJvfWfd5mbUuULX/giphy.gif",
+    "animals": [
+        ("🐈 **Mırmır Kedi**", "https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif"),
+        ("🐕 **Neşeli Köpecik**", "https://media.giphy.com/media/4Zo41lhzKt6iZ8xff9/giphy.gif"),
+        ("🐼 **Tembel Panda**", "https://media.giphy.com/media/EatwJZRUIv41G/giphy.gif"),
+        ("🦊 **Akıllı Tilki**", "https://media.giphy.com/media/cno2xVuF567FVoEZMQ/giphy.gif"),
+        ("🦦 **Sevimli Su Samuru**", "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHY5bTFrb2x5Y3BxeDZ2OXh2czA0MDFnNTI4NmVtc3J3M2syc3FiaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKMt1VVNkHV2PaE/giphy.gif"),
+        ("🐧 **Minik Penguen**", "https://media.giphy.com/media/OJac5MRF6xsp2/giphy.gif"),
+        ("🦥 **Keyifli Tembel Hayvan**", "https://media.giphy.com/media/d90e0cOHb56xW604g5/giphy.gif"),
+    ]
+}
+
+
+# ── EĞLENCELİ VERİ HAVUZLARI ─────────────────────────────────
+KAHVE_FALLARI = [
+    "☕ **Fincanında bir ejderha silüeti belirdi!** Yakın zamanda grubunda büyük bir liderlik veya başarı elde edeceksin.",
+    "☕ **Yolun açık görünüyor!** Önünde 3 vakte kadar çok sevineceğin bir müzik veya sohbet haberi var.",
+    "☕ **Kısmetin kapıda!** Fincanın dibinde bir kalp ve bol neşe var, sevdiğin birinden mesaj alabilirsin.",
+    "☕ **Göz var üzerinde!** Grup arkadaşların senin enerjine ve neşene hayran kalmış durumda.",
+    "☕ **Büyük bir sürpriz yolda!** Beklemediğin bir anda keyifli bir dost meclisi toplanacak.",
+]
+
+FIKRALAR = [
+    "🎭 **Temel ile Dursun:**\nTemel bir gün gökyüzüne bakarken Dursun sormuş:\n— Ula Temel, Ay mı daha uzak yoksa Trabzon mu?\nTemel gülmüş:\n— Ula Dursun, Ay'ı buradan görebiliyorsun ama Trabzon'u göremiyorsun, tabii ki Trabzon daha uzak! 😂",
+    "🎭 **Nasreddin Hoca ve Kazan:**\nHoca komşusundan kazan almış, geri verirken içine tencere koymuş: 'Kazan doğurdu!' demiş. Bir gün kazanı tekrar alıp geri getirmeyince komşu sormuş. Hoca: 'Senin kazan öldü!' demiş. Komşu: 'Hoca kazan ölür mü?' deyince Hoca:\n— Doğurduğuna inanıyordun da öldüğüne niye inanmıyorsun? 🤣",
+    "🎭 **Papağan ve Kaptan:**\nSihirbaz gemide gösteri yaparken ne kaybetse papağan hemen bağırıyormuş:\n— 'Numara numara! Masanın altında!'\nBir gün gemi batmış, sihirbaz ile papağan kalasın üzerinde kalmış. Papağan 3 gün sessizce bakıp sonunda demiş:\n— 'Tamam pes, gemiyi nereye sakladın?' 😆",
+]
+
+SIIRLER = [
+    "📜 *'Ağlasam sesimi duyar mısınız mısralarımda?*\n*Dokunabilir misiniz gözyaşlarıma ellerinizle?*\n*Bilmeyenler beni divane sanır...'* — **Orhan Veli**",
+    "📜 *'Seni sevmek, gökyüzünde kanat çırpan bir ejderhanın ateşi gibi...*\n*Ne söner ne küllenir, daima aydınlatır geceyi.'* — **Ejderha Şiirleri**",
+    "📜 *'Gözlerin bir çığlık, bir yaralı haykırış...*\n*Gözlerin bu gece çok uzaktan geçen bir gemi.'* — **Attilâ İlhan**",
+    "📜 *'Ben sana mecburum bilemezsin, adını mıh gibi aklımda tutuyorum.'* — **Attilâ İlhan**",
+]
+
+HAVALAR = [
+    "☀️ **Hava Durumu:** Pırıl pırıl güneşli, 29°C! Ejderha bile serinlemek için limonata arıyor. 🥤",
+    "⛅ **Hava Durumu:** Parçalı bulutlu, 24°C. Şarkı açıp balkonda kahve içmek için mükemmel bir hava!",
+    "🌧️ **Hava Durumu:** Tatlı bir yağmur eşliğinde 18°C. Kulaklığı takıp slow parça dinleme vakti! 🎧",
+    "⚡ **Hava Durumu:** Fırtınalı ve elektrikli! Ejderhanın kükremesi havayı alevlendiriyor! 🔥",
+    "❄️ **Hava Durumu:** Serin ve ferahlatıcı, 16°C. İnce bir hırka almayı unutmayın!",
+]
+
+YILDIZ_FALLARI = [
+    "⭐ **Yıldız Falın:** Bugün şans yıldızın zirvede parlıyor! Kararsız kaldığın bir konuda adım atarsan kazançlı çıkacaksın.",
+    "⭐ **Yıldız Falın:** Merkür seninle barışık! Grup içi iletişimde parlayacak, esprilerinle herkesi güldüreceksin.",
+    "⭐ **Yıldız Falın:** Venüs sana göz kırpıyor! Kalbini kıpır kıpır yapacak tatlı bir gelişme kapıda.",
+    "⭐ **Yıldız Falın:** Mars enerjisi seni sarıyor! Bugün enerjin yüksek, spora veya müziğe vakit ayır.",
+]
+
+ILTIFATLAR = [
+    "💐 **Ejderha Fısıltısı:** Grubun enerjisini tek başına ikiye katlayan muhteşem bir auraya sahipsin! ✨",
+    "💐 **Ejderha Fısıltısı:** Zarafetin ve neşenle bu grubun en değerli cevherlerinden birisin! 💎",
+    "💐 **Ejderha Fısıltısı:** Senin gibi dostlar zor bulunur; ejderha bile senin yanında sakinleşiyor! 🐲❤️",
+    "💐 **Ejderha Fısıltısı:** Gülüşün grubun en karanlık gününü bile aydınlatacak kadar sıcak! ☀️",
+]
+
+
+# ── SOSYAL MENÜ METNİ & BUTONLARI ─────────────────────────────
 SOSYAL_MENU_TEXT = """
-🐲 **EJDERHA SOSYAL & EĞLENCE MERKEZİ** 🐲
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
+   🐲 **EJDERHA SOSYAL & EĞLENCE MERKEZİ** 🐲
+✨━━━━━━━━━━━━━━━━━━━━━━━━✨
+
+Grubunuza neşe katacak interaktif eğlence ve oyun komutları:
+
+🎲 **OYUNLAR & ŞANS:**
+• `/zar` — 1-6 arası şans zarı atar.
+• `/sans` — Günlük şans yüzdenizi ölçer.
+• `/kahve` — Fincanınızdaki sırları döker.
+• `/yildiz` — Yıldız & burç falınızı yorumlar.
+
+🎭 **KAHKAHA & KÜLTÜR:**
+• `/fikra` — En komik fıkralarla güldürür.
+• `/siir` — Efsane şairlerden dizeler sunar.
+• `/hayvan` — Rastgele tatlı bir hayvan GIF'i getirir.
+• `/saksak` — Sana özel tatlı bir iltifat fısıldar.
+• `/hava` — Eğlenceli günlük hava tahmini yapar.
+
+🥊 **TOPLULUK & TOKAT:**
+• `/slap [@kullanıcı]` — Hedefe GIF'li Osmanlı tokadı atar!
+• `/slapboard` — Tokat liderlik tablosunu açar.
+• `/ship [@üye1] [@üye2]` — Aşk & uyum falı ölçer.
+• `/gruprapor` — Bu grubun aktiflik ve mesaj analizini çıkarır.
 ━━━━━━━━━━━━━━━━━━━━━━━━
-Aşağıdaki eğlence ve topluluk komutlarıyla grubunuzu canlandırın:
-
-🥊 **TOKAT SİSTEMİ:**
-• `/slap [@kullanıcı]` — Hedefe GIF'li Osmanlı tokadı patlatır!
-• `/slapboard` — En çok tokat atan ve yiyenlerin liderlik tablosu.
-
-📊 **AKTİFLİK & GRUP ANALİZİ:**
-• `/mesajlar` — Günün mesaj kralları liderlik sıralaması.
-• `/gruprapor` — Bu grubun detaylı mesaj ve aktiflik raporu.
-• `/ejderha` — Günün birincisi **👑 GERÇEK EJDERHA** ünvan kartı.
-
-💘 **AŞK & EĞLENCE:**
-• `/ship [@kullanıcı1] [@kullanıcı2]` — Aşk ve uyum falı ölçer.
-
-⚙️ **ÖZEL FİLTRELER:**
-• `/filter <kelime> <yanıt>` — Otomatik cevap filtresi ekler.
-• `/stop <kelime>` — Filtreyi siler.
-• `/filters` — Gruptaki tüm filtreleri listeler.
-━━━━━━━━━━━━━━━━━━━━━━━━
-✨ *Butonlara tıklayarak doğrudan işlem yapabilirsiniz:*
+✨ *Aşağıdaki renkli butonlara dokunarak anında deneyin:*
 """
 
 
 def get_sosyal_keyboard() -> InlineKeyboardMarkup:
-    """Sosyal menü için zengin ve interaktif buton takımı."""
-    return InlineKeyboardMarkup(
+    """Zengin emojili ve animasyonlu buton takımı."""
+    return InlineKeyboardMarkup([
         [
-            [
-                InlineKeyboardButton("🥊 Tokat At", switch_inline_query_current_chat="/slap "),
-                InlineKeyboardButton("🏆 Tokat Lideri", callback_data="sosyal_slapboard"),
-            ],
-            [
-                InlineKeyboardButton("📊 Mesaj Kralları", callback_data="sosyal_mesajlar"),
-                InlineKeyboardButton("👑 Gerçek Ejderha", callback_data="sosyal_ejderha"),
-            ],
-            [
-                InlineKeyboardButton("📈 Grup Raporu", callback_data="sosyal_gruprapor"),
-                InlineKeyboardButton("⚙️ Filtreler", callback_data="sosyal_filters"),
-            ],
-            [
-                InlineKeyboardButton("💘 Aşk Ölçer", switch_inline_query_current_chat="/ship "),
-                InlineKeyboardButton("🔄 Menüyü Yenile", callback_data="sosyal_refresh"),
-            ],
-        ]
-    )
+            InlineKeyboardButton("🎲 Zar At", callback_data="sosyal_zar"),
+            InlineKeyboardButton("☕ Kahve Falı", callback_data="sosyal_kahve"),
+        ],
+        [
+            InlineKeyboardButton("🍀 Şansımı Ölç", callback_data="sosyal_sans"),
+            InlineKeyboardButton("🎭 Fıkra Anlat", callback_data="sosyal_fikra"),
+        ],
+        [
+            InlineKeyboardButton("📜 Şiir Oku", callback_data="sosyal_siir"),
+            InlineKeyboardButton("⭐ Yıldız Falı", callback_data="sosyal_yildiz"),
+        ],
+        [
+            InlineKeyboardButton("🐶 Sevimli Hayvan", callback_data="sosyal_hayvan"),
+            InlineKeyboardButton("💐 Şakşak (İltifat)", callback_data="sosyal_saksak"),
+        ],
+        [
+            InlineKeyboardButton("🥊 Tokat At", switch_inline_query_current_chat="/slap "),
+            InlineKeyboardButton("💘 Aşk Ölçer", switch_inline_query_current_chat="/ship "),
+        ],
+        [
+            InlineKeyboardButton("📊 Mesaj Kralları", callback_data="sosyal_mesajlar"),
+            InlineKeyboardButton("📈 Grup Raporu", callback_data="sosyal_gruprapor"),
+        ],
+        [
+            InlineKeyboardButton("🔄 Menüyü Yenile", callback_data="sosyal_refresh"),
+            InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
+        ],
+    ])
 
 
-# ── /sosyal Komutu ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 1. /sosyal KOMUTU
+# ══════════════════════════════════════════════════════════════
 @Client.on_message(filters.command(["sosyal", "social", "eglence"]))
 async def sosyal_command(client: Client, message: Message):
-    """
-    /sosyal veya /eglence komutu:
-    Grup veya özel sohbette zengin Sosyal Menüyü butonlarla birlikte açar.
-    """
+    """/sosyal veya /eglence komutu."""
     try:
         await message.reply_text(
             text=SOSYAL_MENU_TEXT,
@@ -89,15 +176,159 @@ async def sosyal_command(client: Client, message: Message):
         )
     except Exception as e:
         logger.error(f"/sosyal komut hatası: {e}")
-        await message.reply_text(SOSYAL_MENU_TEXT, reply_markup=get_sosyal_keyboard())
 
 
-# ── Sosyal Callback Dinleyicisi ───────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 2. YENİ EĞLENCE KOMUTLARI (GIF DESTEKLİ)
+# ══════════════════════════════════════════════════════════════
+
+# ── /zar ──
+@Client.on_message(filters.command(["zar", "dice"]))
+async def zar_command(client: Client, message: Message):
+    """/zar komutu: 1-6 arası rastgele zar atar."""
+    num = random.randint(1, 6)
+    dice_emojis = ["⚀ 1", "⚁ 2", "⚂ 3", "⚃ 4", "⚄ 5", "⚅ 6"]
+    user_name = message.from_user.first_name if message.from_user else "Ejderha"
+    caption = f"🎲 **{user_name}** zar attı!\n━━━━━━━━━━━━━━━━━━━━━━━━\n✨ Sonuç: **{dice_emojis[num - 1]}** geldi! 🎯"
+    try:
+        await message.reply_animation(animation=GIFS["dice"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ── /sans & /şans ──
+@Client.on_message(filters.command(["sans", "şans", "sansim", "şansım"]))
+async def sans_command(client: Client, message: Message):
+    """/şans komutu: Rastgele şans yüzdesi hesaplar."""
+    pct = random.randint(10, 100)
+    user_name = message.from_user.first_name if message.from_user else "Ejderha"
+    if pct > 80:
+        comment = "🔥 Ejderhanın şansı seninle! Bugün piyango bileti alabilirsin!"
+    elif pct > 50:
+        comment = "✨ Şansın gayet yerinde, güzel haberler kapıda!"
+    else:
+        comment = "🌱 Biraz dikkatli ol, ama enerjini asla düşürme!"
+
+    caption = (
+        f"🍀 **GÜNLÜK ŞANS ÖLÇER** 🍀\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 **Kullanıcı:** {user_name}\n"
+        f"🎯 **Bugünkü Şansınız:** `%{pct}`\n\n"
+        f"{comment}"
+    )
+    try:
+        await message.reply_animation(animation=GIFS["luck"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ── /kahve ──
+@Client.on_message(filters.command(["kahve", "kahvefali", "fal"]))
+async def kahve_command(client: Client, message: Message):
+    """/kahve komutu: Rastgele kahve falı yorumu yapar."""
+    fal = random.choice(KAHVE_FALLARI)
+    user_name = message.from_user.first_name if message.from_user else "Ejderha"
+    caption = (
+        f"☕ **{user_name} İÇİN KAHVE FALI** ☕\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{fal}\n\n"
+        f"✨ *Neyse halin, çıksın falın!*"
+    )
+    try:
+        await message.reply_animation(animation=GIFS["coffee"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ── /fikra & /fıkra ──
+@Client.on_message(filters.command(["fikra", "fıkra", "komik", "espiri"]))
+async def fikra_command(client: Client, message: Message):
+    """/fıkra komutu: Rastgele komik bir fıkra anlatır."""
+    fikra = random.choice(FIKRALAR)
+    try:
+        await message.reply_animation(animation=GIFS["joke"], caption=fikra)
+    except Exception:
+        await message.reply_text(fikra)
+
+
+# ── /siir & /şiir ──
+@Client.on_message(filters.command(["siir", "şiir", "dize"]))
+async def siir_command(client: Client, message: Message):
+    """/şiir komutu: Rastgele güzel bir şiir dizesi gönderir."""
+    siir = random.choice(SIIRLER)
+    try:
+        await message.reply_animation(animation=GIFS["poetry"], caption=siir)
+    except Exception:
+        await message.reply_text(siir)
+
+
+# ── /hava ──
+@Client.on_message(filters.command(["hava", "havadurumu"]))
+async def hava_command(client: Client, message: Message):
+    """/hava komutu: Günlük eğlenceli hava durumu tahmini yapar."""
+    hava = random.choice(HAVALAR)
+    gif_choice = GIFS["weather_sun"] if "güneşli" in hava or "parçalı" in hava else GIFS["weather_rain"]
+    try:
+        await message.reply_animation(animation=gif_choice, caption=hava)
+    except Exception:
+        await message.reply_text(hava)
+
+
+# ── /hayvan ──
+@Client.on_message(filters.command(["hayvan", "tatli", "pet", "kedi", "kopek"]))
+async def hayvan_command(client: Client, message: Message):
+    """/hayvan komutu: Rastgele sevimli bir hayvan GIF'i ve adı gönderir."""
+    name, gif_url = random.choice(GIFS["animals"])
+    caption = f"🐾 **Günün Sevimli Dostu:** {name} ❤️\n✨ *Gününün neşeyle dolması dileğiyle!*"
+    try:
+        await message.reply_animation(animation=gif_url, caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ── /yildiz & /yıldız ──
+@Client.on_message(filters.command(["yildiz", "yıldız", "burc", "burç"]))
+async def yildiz_command(client: Client, message: Message):
+    """/yıldız komutu: Rastgele yıldız & burç falı yorumu sunar."""
+    yildiz = random.choice(YILDIZ_FALLARI)
+    user_name = message.from_user.first_name if message.from_user else "Ejderha"
+    caption = (
+        f"⭐ **{user_name} İÇİN YILDIZ FALI** ⭐\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{yildiz}"
+    )
+    try:
+        await message.reply_animation(animation=GIFS["star"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ── /saksak, /şakşak, /iltifat ──
+@Client.on_message(filters.command(["saksak", "şakşak", "iltifat", "ovgu"]))
+async def saksak_command(client: Client, message: Message):
+    """/şakşak veya /iltifat komutu: Kullanıcıya tatlı bir iltifat eder."""
+    iltifat = random.choice(ILTIFATLAR)
+    user_mention = message.from_user.mention if message.from_user else "Dostum"
+    caption = f"💖 **Sevgili {user_mention},**\n━━━━━━━━━━━━━━━━━━━━━━━━\n{iltifat}"
+    try:
+        await message.reply_animation(animation=GIFS["compliment"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ══════════════════════════════════════════════════════════════
+# 3. SOSYAL MENÜ CALLBACK BUTON YÖNETİCİSİ
+# ══════════════════════════════════════════════════════════════
 @Client.on_callback_query(filters.regex(r"^sosyal_"))
 async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
     """Sosyal menü buton tıklamalarını yönetir."""
     data = callback.data
     chat_id = callback.message.chat.id
+    user_name = callback.from_user.first_name if callback.from_user else "Ejderha"
+
+    back_kb = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")]]
+    )
 
     try:
         if data == "sosyal_refresh":
@@ -108,6 +339,83 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
             )
             await callback.answer("🔄 Menü güncellendi!")
             return
+
+        elif data == "sosyal_zar":
+            num = random.randint(1, 6)
+            dice_emojis = ["⚀ 1", "⚁ 2", "⚂ 3", "⚃ 4", "⚄ 5", "⚅ 6"]
+            out_text = (
+                f"🎲 **ZAR ATILDI!** 🎲\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **Atan:** {user_name}\n"
+                f"🎯 **Gelen Zar:** **{dice_emojis[num - 1]}**\n\n"
+                f"✨ *Tekrar atmak için `/zar` yazabilirsiniz.*"
+            )
+            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            await callback.answer(f"🎲 Zar: {num} geldi!")
+
+        elif data == "sosyal_kahve":
+            fal = random.choice(KAHVE_FALLARI)
+            out_text = (
+                f"☕ **GÜNLÜK KAHVE FALI** ☕\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{fal}\n\n"
+                f"✨ *Detaylı fal için: `/kahve`*"
+            )
+            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            await callback.answer("☕ Falınız bakıldı!")
+
+        elif data == "sosyal_sans":
+            pct = random.randint(20, 100)
+            out_text = (
+                f"🍀 **ŞANS DERECENİZ** 🍀\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **{user_name}** için bugünkü şans:\n"
+                f"🔥 **Oran:** `%{pct}`\n\n"
+                f"✨ *Tekrar denemek için: `/şans`*"
+            )
+            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            await callback.answer(f"🍀 Şansınız: %{pct}")
+
+        elif data == "sosyal_fikra":
+            fikra = random.choice(FIKRALAR)
+            await callback.message.edit_text(fikra, reply_markup=back_kb)
+            await callback.answer("🎭 Fıkra hazır!")
+
+        elif data == "sosyal_siir":
+            siir = random.choice(SIIRLER)
+            await callback.message.edit_text(siir, reply_markup=back_kb)
+            await callback.answer("📜 Şiir hazır!")
+
+        elif data == "sosyal_yildiz":
+            yildiz = random.choice(YILDIZ_FALLARI)
+            out_text = (
+                f"⭐ **YILDIZ & BURÇ FALI** ⭐\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{yildiz}"
+            )
+            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            await callback.answer("⭐ Yıldızınız parlıyor!")
+
+        elif data == "sosyal_hayvan":
+            name, _ = random.choice(GIFS["animals"])
+            out_text = (
+                f"🐾 **GÜNÜN SEVİMLİ DOSTU** 🐾\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"✨ Seçilen Dost: {name}\n\n"
+                f"*(GIF'li görmek için sohbete `/hayvan` yazabilirsiniz!)*"
+            )
+            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            await callback.answer("🐶 Sevimli dost seçildi!")
+
+        elif data == "sosyal_saksak":
+            iltifat = random.choice(ILTIFATLAR)
+            out_text = (
+                f"💐 **ÖZEL İLTİFAT KÖŞESİ** 💐\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{iltifat}"
+            )
+            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            await callback.answer("💐 İltifat fısıldandı!")
 
         elif data == "sosyal_gruprapor":
             from datetime import datetime
@@ -146,11 +454,7 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
                 f"\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"✨ *Detaylı liste için: `/mesajlar`*"
             )
-
-            back_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")]]
-            )
-            await callback.message.edit_text(out_text, reply_markup=back_kb, parse_mode=ParseMode.MARKDOWN)
+            await callback.message.edit_text(out_text, reply_markup=back_kb)
             await callback.answer()
 
         elif data == "sosyal_mesajlar":
@@ -180,92 +484,7 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
                 f"\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"👑 Günün Lideri: **{names.get(sorted_users[0][0], 'Ejderha')}**"
             )
-
-            back_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")]]
-            )
-            await callback.message.edit_text(out_text, reply_markup=back_kb, parse_mode=ParseMode.MARKDOWN)
-            await callback.answer()
-
-        elif data == "sosyal_slapboard":
-            slap_stats = _load_slap_stats()
-            if not slap_stats:
-                await callback.answer("🥊 Henüz kimse tokat atmadı!", show_alert=True)
-                return
-
-            top_givers = sorted(slap_stats.items(), key=lambda i: i[1].get("attı", 0), reverse=True)[:3]
-            top_receivers = sorted(slap_stats.items(), key=lambda i: i[1].get("yedi", 0), reverse=True)[:3]
-
-            givers_txt = "\n".join([f"🥇 **{d.get('isim')}** — `{d.get('attı')}` tokat" for _, d in top_givers if d.get("attı", 0) > 0]) or "Yok"
-            receivers_txt = "\n".join([f"🤕 **{d.get('isim')}** — `{d.get('yedi')}` tokat" for _, d in top_receivers if d.get("yedi", 0) > 0]) or "Yok"
-
-            out_text = (
-                f"🏆 **TOKAT LİDERLİK TABLOSU** 🏆\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🥊 **Top Tokatçılar:**\n{givers_txt}\n\n"
-                f"🤕 **Top Tokat Yiyenler:**\n{receivers_txt}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"✨ `/slap` yazarak sıralamaya girebilirsiniz!"
-            )
-
-            back_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")]]
-            )
-            await callback.message.edit_text(out_text, reply_markup=back_kb, parse_mode=ParseMode.MARKDOWN)
-            await callback.answer()
-
-        elif data == "sosyal_ejderha":
-            from datetime import datetime
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            group_data = _get_group_stats(chat_id, today_str)
-            names = _load_user_names()
-
-            if not group_data:
-                await callback.answer("🐲 Bugün henüz taht sahibi yok!", show_alert=True)
-                return
-
-            sorted_users = sorted(group_data.items(), key=lambda item: item[1], reverse=True)
-            top_uid, top_count = sorted_users[0]
-            top_name = names.get(top_uid, f"Kullanıcı_{top_uid}")
-
-            out_text = (
-                f"👑━━━━━━━━━━━━━━━━━━━━━━👑\n"
-                f"   🐲 **GÜNÜN GERÇEK EJDERHASI** 🐲\n"
-                f"👑━━━━━━━━━━━━━━━━━━━━━━👑\n\n"
-                f"🔥 **Hükümdar:** **{top_name}**\n"
-                f"📜 **Ünvan:** `GERÇEK EJDERHA (THE TRUE DRAGON)`\n"
-                f"⚔️ **Mesaj Sayısı:** `{top_count}` Mesaj\n\n"
-                f"🌋 *'Bugün grubun alevini en güçlü şekilde yakan hükümdar!'* 🐲✨"
-            )
-
-            back_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")]]
-            )
-            await callback.message.edit_text(out_text, reply_markup=back_kb, parse_mode=ParseMode.MARKDOWN)
-            await callback.answer()
-
-        elif data == "sosyal_filters":
-            from bot.plugins.filters import _load_chat_filters
-            chat_filters = _load_chat_filters(chat_id)
-
-            if not chat_filters:
-                filter_list_text = "Bu grupta henüz eklenmiş özel filtre yok.\n\nEkleme formatı:\n`/filter <kelime> <yanıt>`"
-            else:
-                filter_list_text = "\n".join([f"• `{k}`" for k in chat_filters.keys()])
-
-            out_text = (
-                f"⚙️ **GRUP ÖZEL FİLTRELERİ** ⚙️\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{filter_list_text}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"➕ **Ekleme:** `/filter <tetikleyici> <cevap>`\n"
-                f"➖ **Silme:** `/stop <tetikleyici>`"
-            )
-
-            back_kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")]]
-            )
-            await callback.message.edit_text(out_text, reply_markup=back_kb, parse_mode=ParseMode.MARKDOWN)
+            await callback.message.edit_text(out_text, reply_markup=back_kb)
             await callback.answer()
 
     except Exception as e:
