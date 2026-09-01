@@ -1,8 +1,8 @@
 # ============================================
 # 🐲 Ejderha Müzik Botu - Dekoratörler Modülü
 # ============================================
-# Komutların çalıştırılmasından önce ses kanalı,
-# yetki ve grup kontrollerini gerçekleştiren dekoratörler.
+# Kontrol komutlarının (/duraklat, /devam, /gec, /bitir vb.)
+# yayın sırasında güvenle çalışmasını denetleyen dekoratör.
 
 import functools
 import logging
@@ -13,19 +13,15 @@ from pyrogram.types import Message
 from pyrogram.enums import ChatType
 
 from bot.clients import call_client
+from utils.queue_manager import queue
 
 logger = logging.getLogger(__name__)
 
 
 def check_voice_chat() -> Callable:
     """
-    Ses kanalı aktiflik ve bağlantı kontrolü yapan asenkron dekoratör.
-    
-    Kontrol Mantığı:
-    1. Mesajın bir grup veya kanaldan gelip gelmediğini doğrular.
-    2. Botun PyTgCalls üzerinde aktif bir görüşmede (call_client.calls / active_calls) olup olmadığını veya
-       Telegram grubunda aktif bir sesli sohbet başlatılıp başlatılmadığını kontrol eder.
-    3. Sesli sohbet aktif değilse veya bot bağlı değilse işlemi iptal edip kullanıcıyı uyarır.
+    Yayın ve ses kanalı aktifliğini denetleyen esnek dekoratör.
+    Kuyrukta aktif parça veya PyTgCalls çağrısı varsa işlemi yürütür.
     """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
@@ -38,18 +34,28 @@ def check_voice_chat() -> Callable:
             chat_id = message.chat.id
             is_active = False
 
-            # 2. PyTgCalls aktif çağrı kontrolü
+            # 2. Kuyrukta çalan parça var mı?
             try:
-                if call_client:
+                if await queue.has_current(chat_id):
+                    is_active = True
+            except Exception:
+                pass
+
+            # 3. PyTgCalls üzerinde aktif çağrı var mı?
+            if not is_active and call_client:
+                try:
                     active_calls = getattr(call_client, "active_calls", None) or getattr(call_client, "calls", None)
                     if active_calls is not None:
                         if isinstance(active_calls, dict) and chat_id in active_calls:
                             is_active = True
                         elif isinstance(active_calls, (list, set, tuple)) and chat_id in active_calls:
                             is_active = True
+                except Exception:
+                    pass
 
-                # 3. Telegram Grup Sesli Sohbeti (Group Call) aktiflik kontrolü
-                if not is_active:
+            # 4. Telegram grup sesli sohbet kontrolü
+            if not is_active:
+                try:
                     chat = await client.get_chat(chat_id)
                     if (
                         getattr(chat, "is_voice_chat_active", False)
@@ -57,14 +63,13 @@ def check_voice_chat() -> Callable:
                         or getattr(chat, "active_call", None) is not None
                     ):
                         is_active = True
-            except Exception as e:
-                logger.debug(f"check_voice_chat kontrol uyarısı ({chat_id}): {e}")
-                # Telegram API geçici erişiminde hatayı tolere et
-                is_active = False
+                except Exception as e:
+                    logger.debug(f"check_voice_chat get_chat esnetildi ({chat_id}): {e}")
+                    is_active = True
 
-            # 4. Sesli kanal aktif değilse komutu durdur ve uyar
+            # 5. Aktif yayın yoksa uyar
             if not is_active:
-                await message.reply_text("❌ Sesli kanal aktif değil! Lütfen grupta sesli sohbet başlatın.")
+                await message.reply_text("❌ Şu an sesli sohbette çalan bir yayın bulunmuyor!\n`/play <şarkı adı>` yazarak müzik başlatabilirsiniz. 🐲🔥")
                 return None
 
             return await func(client, message, *args, **kwargs)

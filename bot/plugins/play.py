@@ -89,26 +89,38 @@ def make_stream(file_path: str, is_video: bool = False) -> MediaStream:
         return _make_audio_stream(file_path)
 
 
-async def voice_chat_active(client: Client, chat_id: int) -> bool:
+async def join_voice_chat(chat_id: int, stream_obj: MediaStream) -> bool:
     """
-    Grubun sesli sohbetinin aktif olup olmadığını kontrol eder.
+    Sesli sohbete otomatik olarak bağlanır veya mevcut akışı günceller.
+    /join komutuna gerek kalmadan botun doğrudan yayına geçmesini sağlar.
     """
-    try:
-        if call_client:
-            active_calls = getattr(call_client, "active_calls", None) or getattr(call_client, "calls", None)
-            if active_calls is not None:
-                if isinstance(active_calls, dict) and chat_id in active_calls:
-                    return True
-                elif isinstance(active_calls, (list, set, tuple)) and chat_id in active_calls:
-                    return True
+    if not call_client:
+        logger.error("PyTgCalls istemcisi aktif değil!")
+        return False
 
-        chat = await client.get_chat(chat_id)
-        if getattr(chat, "is_voice_chat_active", False) or getattr(chat, "has_active_voice_chat", False) or getattr(chat, "active_call", None) is not None:
-            return True
-    except Exception as e:
-        logger.debug(f"voice_chat_active uyarısı ({chat_id}): {e}")
+    # 1. Zaten bağlıysa akışı güncellemeyi dene
+    try:
+        await call_client.change_stream(chat_id, stream_obj)
+        logger.info(f"✅ Akış güncellendi (chat_id: {chat_id})")
         return True
-    return False
+    except Exception:
+        pass
+
+    # 2. Bağlı değilse doğrudan sesli sohbete katıl
+    try:
+        await call_client.join_group_call(chat_id, stream_obj)
+        logger.info(f"✅ Sesli sohbete otomatik bağlanıldı (chat_id: {chat_id})")
+        return True
+    except Exception as e:
+        logger.warning(f"Sesli sohbete 1. bağlanma denemesi başarısız ({chat_id}): {e}")
+        await asyncio.sleep(0.8)
+        try:
+            await call_client.join_group_call(chat_id, stream_obj)
+            logger.info(f"✅ Sesli sohbete 2. denemede bağlanıldı (chat_id: {chat_id})")
+            return True
+        except Exception as e2:
+            logger.error(f"❌ Sesli sohbete bağlanılamadı ({chat_id}): {e2}")
+            return False
 
 
 async def _prefetch_next(chat_id: int):
@@ -183,9 +195,12 @@ async def _play_next(client: Client, chat_id: int, message: Message = None):
                 await _play_next(client, chat_id, message)
                 return
 
-        # ── Akışı Değiştir ────────────────────────────────────
+        # ── Akışı Başlat veya Değiştir ────────────────────────
         stream_obj = make_stream(file_path, is_video=is_video)
-        await call_client.change_stream(chat_id, stream_obj)
+        joined = await join_voice_chat(chat_id, stream_obj)
+        if not joined:
+            logger.error(f"Sıradaki parça için sesli sohbete bağlanılamadı ({chat_id})")
+            return
 
         msg_text = msg_playing(track["title"], track.get("duration_str", ""), is_video=is_video)
         if message:
@@ -235,28 +250,13 @@ async def stream_closed_handler(client: PyTgCalls, chat_id: int):
 
 
 # ══════════════════════════════════════════════════════════════
-# ANA OYNATMA MOTORU (If/Else Spotify → YouTube Akışı)
+# ANA OYNATMA MOTORU (Spotify & YouTube Akışı + Otomatik Bağlanma)
 # ══════════════════════════════════════════════════════════════
-# Bu fonksiyon kullanıcıdan gelen isteği yakalar ve şu kontrol
-# bloğunu uygular:
-#
-#   if → Spotify linki ise:
-#        1. Regex ile tür ve ID çıkar
-#        2. Spotipy ile "Sanatçı - Şarkı Adı" al
-#        3. "ytsearch1:Sanatçı - Şarkı Adı" olarak yt-dlp'ye gönder
-#
-#   else → Spotify linki değilse:
-#        Normal metin araması veya YouTube linki olarak işle
 
 async def _process_play(client: Client, message: Message, is_video: bool = False):
     """
     /oynat ve /voynat komutlarının ortak motoru.
-
-    OYNATMA MANTIĞI (IF/ELSE):
-    ─────────────────────────
-    • Spotify linki → Spotipy API → "Sanatçı - Şarkı" → ytsearch1: → yt-dlp
-    • YouTube linki → Doğrudan yt-dlp
-    • Metin araması → ytsearch1:metin → yt-dlp
+    Kullanıcı komutu verdiğinde doğrudan sesli sohbete bağlanır ve yayını başlatır.
     """
     cmd_name = "/voynat" if is_video else "/oynat"
     if len(message.command) < 2:
@@ -275,12 +275,7 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
     # ══════════════════════════════════════════════════════════
 
     if is_spotify_url(raw_query):
-        # ── SPOTIFY LİNKİ ALGILANDI ──────────────────────────
-        # 1. Spotify API ile şarkı/sanatçı bilgilerini çek
-        # 2. "Sanatçı Adı - Şarkı Adı" formatına dönüştür
-        # 3. Bu metni YouTube'da arat (ytsearch1: ile)
         logger.info(f"🟢 Spotify linki algılandı: {raw_query}")
-
         spotify_search_list = await get_spotify_tracks(raw_query)
         if not spotify_search_list:
             await status_msg.edit_text(msg_error("Spotify linki çözümlenemedi veya şarkı bulunamadı!"))
@@ -288,20 +283,17 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
 
         # ── Çoklu şarkı (Album / Playlist) ────────────────────
         if len(spotify_search_list) > 1:
-            import_list = spotify_search_list[:50]  # Max 50 parça ile sınırla (rate limit önlemi)
+            import_list = spotify_search_list[:50]
             await status_msg.edit_text(msg_spotify_importing(len(import_list)))
-
             first_track = None
 
             for i, artist_song in enumerate(import_list):
-                # İstekler arasına küçük bekleme koyarak YouTube rate limitini önle
                 if i > 0:
                     await asyncio.sleep(0.3)
 
                 logger.info(f"🟢 Spotify → YouTube araması: ytsearch1:{artist_song}")
                 yt_res = await search_youtube(artist_song)
                 if not yt_res:
-                    logger.warning(f"YouTube'da bulunamadı: {artist_song}")
                     continue
 
                 track_info = {
@@ -334,13 +326,15 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
                         return
 
                     stream_obj = make_stream(file_path, is_video=is_video)
-                    try:
-                        await call_client.join_group_call(chat_id, stream_obj)
-                    except Exception:
-                        await call_client.change_stream(chat_id, stream_obj)
+                    joined = await join_voice_chat(chat_id, stream_obj)
+                    if not joined:
+                        await status_msg.edit_text("❌ Sesli kanala bağlanılamadı. Lütfen grupta sesli sohbetin açık olduğundan emin olun.")
+                        await queue.clear(chat_id)
+                        return
 
                     await status_msg.edit_text(
-                        msg_playing(first_track["title"], first_track.get("duration_str", ""), is_video=is_video)
+                        msg_playing(first_track["title"], first_track.get("duration_str", ""), is_video=is_video),
+                        reply_markup=get_player_keyboard(is_paused=False),
                     )
                     await _prefetch_next(chat_id)
                 except Exception as e:
@@ -349,30 +343,13 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
                     await queue.clear(chat_id)
             return
 
-        # ── Tekli Spotify şarkısı ─────────────────────────────
-        # spotify_search_list[0] = "Sanatçı Adı - Şarkı Adı" (Örn: "Manga - Cevapsız Sorular")
-        # Bunu ytsearch1: ile YouTube'da aratıyoruz
-        artist_song_text = spotify_search_list[0]
-        logger.info(f"🟢 Spotify tekli şarkı → YouTube araması: ytsearch1:{artist_song_text}")
-
-        # search_youtube fonksiyonu zaten "ytsearch1:" prefix'ini eklediği için
-        # sadece "Sanatçı - Şarkı" metnini gönderiyoruz
-        search_query = artist_song_text
-
+        search_query = spotify_search_list[0]
     else:
-        # ── SPOTIFY LİNKİ DEĞİL (Normal Akış) ────────────────
-        # Düz metin araması veya YouTube linki olarak devam et
         search_query = raw_query
 
     # ══════════════════════════════════════════════════════════
-    # YOUTUBE ARAMA VE OYNATMA (Her iki dal da buraya gelir)
+    # YOUTUBE ARAMA VE OYNATMA
     # ══════════════════════════════════════════════════════════
-    # search_query değişkeni:
-    #   - Spotify'dan geldiyse: "Manga - Cevapsız Sorular" (API'den çekilmiş)
-    #   - Normal geldiyse: Kullanıcının yazdığı metin veya YouTube linki
-    #
-    # search_youtube() fonksiyonu dahili olarak ytsearch1: prefix'ini ekler
-
     result = await search_youtube(search_query)
     if not result:
         await status_msg.edit_text(msg_error("İstenen parça/video YouTube üzerinde bulunamadı!"))
@@ -390,22 +367,18 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
     is_playing = await queue.has_current(chat_id)
 
     if is_playing:
-        # Zaten bir şey çalıyorsa → kuyruğa ekle
         position = await queue.add(chat_id, track)
         await status_msg.edit_text(msg_queued(track["title"], position, is_video=is_video))
 
-        # Sıradaki ilk parçayı arka planda indir
         if position == 1:
             if is_video:
                 asyncio.create_task(get_video_file_for_stream(track["url"]))
             else:
                 asyncio.create_task(get_audio_file_for_stream(track["url"]))
     else:
-        # Hiçbir şey çalmıyorsa → doğrudan çalmaya başla
         await queue.set_current(chat_id, track)
 
         try:
-            # Ses veya video dosyasını hazırla
             if is_video:
                 file_path = await get_video_file_for_stream(result["url"])
             else:
@@ -416,7 +389,6 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
                 await queue.clear(chat_id)
                 return
 
-            # Dosya boyutu kontrolü (bozuk dosya tespiti)
             if os.path.getsize(file_path) < 10000:
                 try:
                     os.remove(file_path)
@@ -431,19 +403,12 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
                     await queue.clear(chat_id)
                     return
 
-            # Akış nesnesi oluştur (Ses veya Video)
             stream_obj = make_stream(file_path, is_video=is_video)
-
-            # Sesli sohbete katıl veya akışı değiştir
-            try:
-                await call_client.join_group_call(chat_id, stream_obj)
-            except Exception:
-                try:
-                    await call_client.change_stream(chat_id, stream_obj)
-                except Exception:
-                    await status_msg.edit_text(msg_no_voice_chat())
-                    await queue.clear(chat_id)
-                    return
+            joined = await join_voice_chat(chat_id, stream_obj)
+            if not joined:
+                await status_msg.edit_text("❌ Sesli kanala bağlanılamadı. Lütfen grupta sesli sohbetin açık olduğundan emin olun.")
+                await queue.clear(chat_id)
+                return
 
             await status_msg.edit_text(
                 msg_playing(track["title"], track.get("duration_str", ""), is_video=is_video),
@@ -457,17 +422,15 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
             await queue.clear(chat_id)
 
 
-# ── Komut Kayıtları ───────────────────────────────────────────
+# ── Komut Kayıtları (Doğrudan Otomatik Bağlanma) ───────────────
 
 @Client.on_message(filters.command(["oynat", "play"]) & filters.group)
-@check_voice_chat()
 async def play_command(client: Client, message: Message):
-    """/oynat veya /play: Sesli sohbette müzik çalar."""
+    """/oynat veya /play: Sesli sohbette müzik çalar (otomatik bağlanır)."""
     await _process_play(client, message, is_video=False)
 
 
 @Client.on_message(filters.command(["voynat", "vplay", "video"]) & filters.group)
-@check_voice_chat()
 async def vplay_command(client: Client, message: Message):
-    """/voynat, /vplay veya /video: Sesli sohbette 720p görüntülü yayın başlatır."""
+    """/voynat, /vplay veya /video: Sesli sohbette 720p görüntülü yayın başlatır (otomatik bağlanır)."""
     await _process_play(client, message, is_video=True)
