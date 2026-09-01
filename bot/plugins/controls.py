@@ -53,35 +53,6 @@ async def voice_chat_active(client: Client, chat_id: int) -> bool:
     return False
 
 
-# ── Sesli Sohbete Bağlanma Komutu ──────────────────────────────
-@Client.on_message(filters.command(["join", "baglan", "katil"]) & filters.group)
-async def join_command(client: Client, message: Message):
-    """
-    /join veya /baglan komutu:
-    Sesli sohbete bağlanır ve botu aktif hale getirir.
-    """
-    chat_id = message.chat.id
-    try:
-        chat = await client.get_chat(chat_id)
-        is_vc_open = (
-            getattr(chat, "is_voice_chat_active", False)
-            or getattr(chat, "has_active_voice_chat", False)
-            or getattr(chat, "active_call", None) is not None
-        )
-        if not is_vc_open:
-            await message.reply_text("❌ Grupta aktif bir sesli sohbet bulunamadı! Lütfen önce sesli sohbeti başlatın.")
-            return
-
-        if call_client:
-            active_calls = getattr(call_client, "active_calls", None) or getattr(call_client, "calls", None)
-            if active_calls and ((isinstance(active_calls, dict) and chat_id in active_calls) or (isinstance(active_calls, (list, set, tuple)) and chat_id in active_calls)):
-                await message.reply_text("✅ Bot zaten sesli kanala bağlı durumda!")
-                return
-
-        await message.reply_text("✅ Sesli sohbet hazır! `/play <şarkı_adı>` yazarak müzik başlatabilirsiniz.")
-    except Exception as e:
-        logger.error(f"Join komut hatası: {e}")
-        await message.reply_text(f"❌ Sesli sohbete bağlanırken hata oluştu: {e}")
 
 
 # ── İnteraktif Kontrol Paneli Komutları ────────────────────────

@@ -44,9 +44,11 @@ from utils.ytdl import (
     YouTubeBotChallengeError,
 )
 from utils.spotify import is_spotify_url, get_spotify_tracks
-from utils.decorators import check_voice_chat
 
 logger = logging.getLogger(__name__)
+
+# Kuyruk parça limiti (çalan şarkı hariç maksimum bekleyen parça sayısı)
+MAX_QUEUE_SIZE = 20
 
 # ── Pürüzsüz ve Kararlı Akış FFmpeg Parametreleri ─────────────
 SMOOTH_STREAM_FFMPEG = (
@@ -256,7 +258,8 @@ async def stream_closed_handler(client: PyTgCalls, chat_id: int):
 async def _process_play(client: Client, message: Message, is_video: bool = False):
     """
     /oynat ve /voynat komutlarının ortak motoru.
-    Kullanıcı komutu verdiğinde doğrudan sesli sohbete bağlanır ve yayını başlatır.
+    Kullanıcı komutu verdiğinde doğrudan sesli sohbete otomatik bağlanır ve yayını başlatır.
+    Kuyruk için 20 şarkı sınırı uygular (çalan şarkı hariç).
     """
     cmd_name = "/voynat" if is_video else "/oynat"
     if len(message.command) < 2:
@@ -267,6 +270,13 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
     raw_query = " ".join(message.command[1:]).strip()
     chat_id = message.chat.id
     requester = message.from_user.first_name if message.from_user else "Bilinmeyen"
+
+    # Kuyruk limit kontrolü: Çalan şarkı varsa ve kuyruk 20 limitine ulaştıysa doğrudan uyar
+    is_playing = await queue.has_current(chat_id)
+    current_queue = await queue.get_queue(chat_id)
+    if is_playing and len(current_queue) >= MAX_QUEUE_SIZE:
+        await message.reply_text("❌ Kuyruk dolu! (20 şarkı limiti)")
+        return
 
     status_msg = await message.reply_text(msg_searching(raw_query, is_video=is_video))
 
@@ -288,6 +298,13 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
             first_track = None
 
             for i, artist_song in enumerate(import_list):
+                # Kuyruk 20 limitine ulaştıysa daha fazla şarkı ekleme
+                curr_q = await queue.get_queue(chat_id)
+                currently_playing = await queue.has_current(chat_id)
+                if currently_playing and len(curr_q) >= MAX_QUEUE_SIZE:
+                    logger.info(f"Kuyruk 20 şarkı limitine ulaştı ({chat_id}). Spotify aktarımı durduruldu.")
+                    break
+
                 if i > 0:
                     await asyncio.sleep(0.3)
 
@@ -305,8 +322,8 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
                     "requester": requester,
                 }
 
-                is_playing = await queue.has_current(chat_id)
-                if not is_playing and first_track is None:
+                is_playing_now = await queue.has_current(chat_id)
+                if not is_playing_now and first_track is None:
                     first_track = track_info
                     await queue.set_current(chat_id, track_info)
                 else:
@@ -367,6 +384,12 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
     is_playing = await queue.has_current(chat_id)
 
     if is_playing:
+        # Kuyruk 20 şarkı limiti kontrolü
+        current_queue = await queue.get_queue(chat_id)
+        if len(current_queue) >= MAX_QUEUE_SIZE:
+            await status_msg.edit_text("❌ Kuyruk dolu! (20 şarkı limiti)")
+            return
+
         position = await queue.add(chat_id, track)
         await status_msg.edit_text(msg_queued(track["title"], position, is_video=is_video))
 
@@ -434,3 +457,4 @@ async def play_command(client: Client, message: Message):
 async def vplay_command(client: Client, message: Message):
     """/voynat, /vplay veya /video: Sesli sohbette 720p görüntülü yayın başlatır (otomatik bağlanır)."""
     await _process_play(client, message, is_video=True)
+

@@ -59,7 +59,7 @@ MIN_VALID_FILE_SIZE = 10_000  # 10 KB
 # ── 1. Akıllı TTL / LRU Arama Önbelleği ────────────────────────
 class _TTLCache:
     """Thread-safe ve asenkron uyumlu TTL + LRU önbellek."""
-    def __init__(self, maxsize: int = 500, ttl_seconds: int = 1800):
+    def __init__(self, maxsize: int = 500, ttl_seconds: int = 3600):
         self._maxsize = maxsize
         self._ttl = ttl_seconds
         self._cache: OrderedDict[str, Tuple[float, Any]] = OrderedDict()
@@ -84,7 +84,7 @@ class _TTLCache:
                 self._cache.popitem(last=False)  # En eskiyi sil
             self._cache[key] = (time.time(), value)
 
-_search_cache = _TTLCache(maxsize=500, ttl_seconds=1800)  # 30 dk arama önbelleği
+_search_cache = _TTLCache(maxsize=500, ttl_seconds=3600)  # 60 dk (3600 sn) arama önbelleği
 
 
 # ── 2. In-Flight İndirme Tekilleştirme (Request Deduplication) ─
@@ -120,7 +120,7 @@ def _get_base_opts(cookiefile: Optional[str] = None) -> dict:
         "skip_unavailable_fragments": True,
         "ignoreerrors": False,
         "no_color": True,
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "web", "tv"],
@@ -296,42 +296,40 @@ async def search_youtube(query: str) -> Optional[dict]:
     return None
 
 
-# ── 6. Stream / Audio URL Alma Fonksiyonu ──────────────────────
+# ── 6. Hızlandırılmış Stream / Audio URL Alma Fonksiyonu ────────
 async def get_audio_url(query: str) -> Optional[str]:
     """
     Verilen şarkı adı veya doğrudan YouTube/medya linki için
-    oynatılabilir doğrudan ses akışı URL'sini alır.
+    hızlandırılmış doğrudan ses akışı URL'sini alır.
 
-    Çalışma Mantığı:
-    1. Girdi doğrudan URL ise doğrudan kullanılır.
-    2. Girdi arama metni ise 'ytsearch:1:sorgu' ile ilk video sonucu bulunur.
-    3. yt-dlp format tercihi: 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio'.
-    4. Varsa '/app/cookies.txt' veya tanımlı çerez dosyasını otomatik uygular.
-    5. TTL önbellek ile gereksiz istekleri engeller.
-    6. YouTube kısıtlamalarında SoundCloud yedeğini devreye alır.
+    Hızlandırma ve Optimizasyonlar:
+    - yt-dlp'nin extract_info çağrısı download=False ile hızlıca çalıştırılır.
+    - Format seçeneği: 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio'.
+    - Önbellek (TTL Cache) süresi: 3600 saniye (1 saat).
+    - Asenkron executor (run_in_executor) ile paralel ve donmayan işlemler.
     """
     query = query.strip()
     if not query:
         return None
 
-    # Önbellek kontrolü
+    # 1. TTL Önbellek Kontrolü (TTL = 3600 saniye)
     cache_key = f"audio_url:{query.lower()}"
     cached = await _search_cache.get(cache_key)
     if cached:
-        logger.debug(f"⚡ Önbellekten ses URL'si getirildi: {query}")
+        logger.debug(f"⚡ Önbellekten ses URL'si getirildi (Cache HIT): {query}")
         return cached
 
-    # URL mi yoksa arama terimi mi kontrolü
+    # 2. URL veya Arama Sorgusu Tespiti
     is_direct_url = query.startswith(("http://", "https://"))
     target = query if is_direct_url else f"ytsearch:1:{query}"
 
     opts = {
         **_get_base_opts(),
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
         "skip_download": True,
     }
 
-    # Eğer Docker ortamında /app/cookies.txt varsa öncelikli olarak kullan
+    # Docker cookies kontrolü
     if os.path.exists("/app/cookies.txt") and os.path.getsize("/app/cookies.txt") > 10:
         opts["cookiefile"] = "/app/cookies.txt"
 
@@ -369,14 +367,14 @@ async def get_audio_url(query: str) -> Optional[str]:
                 if formats:
                     return formats[-1].get("url")
         except Exception as e:
-            logger.warning(f"get_audio_url YouTube deneme hatası ({query}): {e}")
+            logger.warning(f"get_audio_url YouTube hatası ({query}): {e}")
 
         # SoundCloud failover yedeği
         if not is_direct_url:
             try:
                 sc_opts = {
                     **_get_base_opts(),
-                    "format": "bestaudio/best",
+                    "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
                     "skip_download": True,
                 }
                 with yt_dlp.YoutubeDL(sc_opts) as ydl:
@@ -390,6 +388,7 @@ async def get_audio_url(query: str) -> Optional[str]:
 
         return None
 
+    # Asenkron executor ile paralel çalıştırma
     loop = asyncio.get_event_loop()
     try:
         audio_url = await loop.run_in_executor(_executor, _sync_get_audio_url)
