@@ -317,10 +317,11 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(f"{DOWNLOAD} Nasıl İndirilir?", callback_data="menu_download"),
         ],
         [
-            InlineKeyboardButton(f"{GEAR} Ayarlar & Bilgi", callback_data="menu_settings"),
-            InlineKeyboardButton(f"🎛️ Kontrol Paneli", callback_data="ctrl_panel"),
+            InlineKeyboardButton("✨ Sosyal Menü", callback_data="menu_sosyal"),
+            InlineKeyboardButton("🎛️ Kontrol Paneli", callback_data="ctrl_panel"),
         ],
         [
+            InlineKeyboardButton(f"{GEAR} Ayarlar & Bilgi", callback_data="menu_settings"),
             InlineKeyboardButton(f"{CROWN} Geliştirici", callback_data="menu_developer"),
         ],
     ])

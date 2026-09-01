@@ -2,8 +2,8 @@
 # 🐲 Ejderha Müzik Botu - Günlük Aktiflik & Liderlik
 # ============================================
 # Gruptaki mesajları sayar, data/daily_stats.json dosyasına kaydeder.
-# Günlük liderlik tablosunu listeler ve 1. olan kullanıcıya
-# "👑 GERÇEK EJDERHA 🐲" ünvanını verir.
+# Günlük liderlik tablosunu ve grup analiz raporunu (/gruprapor) listeler.
+# 1. olan kullanıcıya "👑 GERÇEK EJDERHA 🐲" ünvanını verir.
 
 import os
 import json
@@ -71,21 +71,31 @@ def _save_user_names(names: dict):
         logger.error(f"user_names.json yazma hatası: {e}")
 
 
-def _increment_user_message(user_id: int, user_name: str):
+def _increment_user_message(user_id: int, user_name: str, chat_id: Optional[int] = None):
     """
-    Belirtilen kullanıcının bugünkü mesaj sayısını 1 artırır
-    ve JSON dosyasına kaydeder.
+    Kullanıcının ve grubun bugünkü mesaj sayısını artırır.
+    Hem genel sayacı hem de gruba özel sayacı günceller.
     """
     stats = _load_daily_stats()
     today_str = datetime.now().strftime("%Y-%m-%d")
     uid_str = str(user_id)
 
-    # Günlük sözlüğü oluştur
     if today_str not in stats:
         stats[today_str] = {}
 
-    # Mesaj sayısını artır
-    stats[today_str][uid_str] = stats[today_str].get(uid_str, 0) + 1
+    # Genel sayaç
+    if uid_str not in stats[today_str] or isinstance(stats[today_str].get(uid_str), int):
+        stats[today_str][uid_str] = stats[today_str].get(uid_str, 0) + 1
+
+    # Gruba özel sayaç (Grup analizi için)
+    if chat_id:
+        cid_str = str(chat_id)
+        if "groups" not in stats[today_str]:
+            stats[today_str]["groups"] = {}
+        if cid_str not in stats[today_str]["groups"]:
+            stats[today_str]["groups"][cid_str] = {}
+        stats[today_str]["groups"][cid_str][uid_str] = stats[today_str]["groups"][cid_str].get(uid_str, 0) + 1
+
     _save_daily_stats(stats)
 
     # Kullanıcı adını güncelle
@@ -94,6 +104,27 @@ def _increment_user_message(user_id: int, user_name: str):
         if names.get(uid_str) != user_name:
             names[uid_str] = user_name
             _save_user_names(names)
+
+
+def _get_group_stats(chat_id: int, date_str: Optional[str] = None) -> dict:
+    """Belirtilen grubun belirtilen gündeki mesaj istatistiklerini döndürür."""
+    stats = _load_daily_stats()
+    today_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    today_data = stats.get(today_str, {})
+
+    groups_data = today_data.get("groups", {})
+    cid_str = str(chat_id)
+
+    # Gruba özel veri varsa öncelikli olarak al
+    if cid_str in groups_data:
+        return groups_data[cid_str]
+
+    # Yoksa genel veriyi filtreleyip döndür
+    user_counts = {}
+    for k, v in today_data.items():
+        if k != "groups" and isinstance(v, int):
+            user_counts[k] = v
+    return user_counts
 
 
 # ══════════════════════════════════════════════════════════════
@@ -108,29 +139,26 @@ async def message_counter_handler(client: Client, message: Message):
     - group=10 ile çalışır, diğer komut ve eklentilerin çalışmasını engellemez.
     """
     try:
-        # Bot veya bilinmeyen kullanıcıları sayma
         if not message.from_user or message.from_user.is_bot:
             message.continue_propagation()
             return
 
         text = message.text or message.caption or ""
 
-        # Komutları hariç tut (/, !, . ile başlayan mesajlar komuttur)
+        # Komutları hariç tut
         if text.startswith(("/", "!", ".")):
             message.continue_propagation()
             return
 
-        # Kullanıcı bilgilerini al
         user_id = message.from_user.id
         user_name = message.from_user.first_name or message.from_user.username or f"Kullanıcı_{user_id}"
+        chat_id = message.chat.id
 
-        # Mesajı sayaca ekle
-        _increment_user_message(user_id, user_name)
+        _increment_user_message(user_id, user_name, chat_id=chat_id)
 
     except Exception as e:
         logger.debug(f"Mesaj sayma işleminde uyarı: {e}")
 
-    # Mesajın diğer komutlara ve eklentilere akmaya devam etmesini sağla
     message.continue_propagation()
 
 
@@ -145,10 +173,10 @@ async def daily_stats_command(client: Client, message: Message):
     Günün 1.'sine '👑 GERÇEK EJDERHA 🐲' ünvanını verir!
     """
     today_str = datetime.now().strftime("%Y-%m-%d")
-    stats = _load_daily_stats()
-    today_data: dict = stats.get(today_str, {})
+    chat_id = message.chat.id
+    group_data = _get_group_stats(chat_id, today_str)
 
-    if not today_data:
+    if not group_data:
         await message.reply_text(
             "📊 **GÜNLÜK MESAJ LİDERLİK TABLOSU** 📊\n"
             f"📅 Tarih: `{today_str}`\n\n"
@@ -157,24 +185,15 @@ async def daily_stats_command(client: Client, message: Message):
         )
         return
 
-    # Kullanıcı adlarını çek
     names = _load_user_names()
+    sorted_users = sorted(group_data.items(), key=lambda item: item[1], reverse=True)
 
-    # Mesaj sayısına göre çoktan aza sırala
-    sorted_users = sorted(
-        today_data.items(),
-        key=lambda item: item[1],
-        reverse=True
-    )
+    total_messages = sum(group_data.values())
+    active_users_count = len(group_data)
 
-    total_messages = sum(today_data.values())
-    active_users_count = len(today_data)
-
-    # Sıralama metni oluştur
     leaderboard_lines = []
     medals = ["👑", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
 
-    champion_id = None
     champion_name = None
     champion_count = 0
 
@@ -183,7 +202,6 @@ async def daily_stats_command(client: Client, message: Message):
         name = names.get(uid, f"Kullanıcı_{uid}")
 
         if idx == 0:
-            champion_id = uid
             champion_name = name
             champion_count = count
             title_badge = " 🔥 **[GERÇEK EJDERHA]**"
@@ -199,7 +217,6 @@ async def daily_stats_command(client: Client, message: Message):
 
     lines_text = "\n".join(leaderboard_lines)
 
-    # 1. Olan Gerçek Ejderha için özel taçlandırma mesajı
     champion_callout = ""
     if champion_name and champion_count > 0:
         champion_callout = (
@@ -232,10 +249,10 @@ async def real_dragon_command(client: Client, message: Message):
     Günün birincisini ilan eden, ona özel fantastik ünvan kartını gönderir.
     """
     today_str = datetime.now().strftime("%Y-%m-%d")
-    stats = _load_daily_stats()
-    today_data: dict = stats.get(today_str, {})
+    chat_id = message.chat.id
+    group_data = _get_group_stats(chat_id, today_str)
 
-    if not today_data:
+    if not group_data:
         await message.reply_text(
             "🐲 **GERÇEK EJDERHA TAHTI BOŞ!** 🐲\n\n"
             "Bugün henüz kimse taht için mücadele etmedi.\n"
@@ -244,7 +261,7 @@ async def real_dragon_command(client: Client, message: Message):
         return
 
     names = _load_user_names()
-    sorted_users = sorted(today_data.items(), key=lambda item: item[1], reverse=True)
+    sorted_users = sorted(group_data.items(), key=lambda item: item[1], reverse=True)
     top_uid, top_count = sorted_users[0]
     top_name = names.get(top_uid, f"Kullanıcı_{top_uid}")
 
@@ -262,3 +279,74 @@ async def real_dragon_command(client: Client, message: Message):
     )
 
     await message.reply_text(coronation_text)
+
+
+# ══════════════════════════════════════════════════════════════
+# 4. GRUP BAZLI DETAYLI ANALİZ RAPORU (/gruprapor, /rapor, /analiz)
+# ══════════════════════════════════════════════════════════════
+@Client.on_message(filters.command(["gruprapor", "rapor", "analiz", "groupreport"]))
+async def group_report_command(client: Client, message: Message):
+    """
+    /gruprapor veya /rapor komutu:
+    Mevcut grubun günlük mesaj analizi, aktif üye sayısı,
+    günün birincisi (Gerçek Ejderha) ve ilk 3 aktif üyeyi listeler.
+    Herkese açıktır.
+    """
+    chat_id = message.chat.id
+    chat_title = message.chat.title or "Bu Grup"
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    group_data = _get_group_stats(chat_id, today_str)
+
+    if not group_data:
+        await message.reply_text(
+            f"📊 **{chat_title.upper()} - GÜNLÜK AKTİFLİK RAPORU** 📊\n"
+            f"📅 **Tarih:** `{today_str}`\n\n"
+            "💬 Bu grupta bugün henüz kayıtlı mesaj bulunmuyor.\n"
+            "Sohbete başlayarak raporu ilk siz hareketlendirin! 🐲🔥"
+        )
+        return
+
+    names = _load_user_names()
+    sorted_users = sorted(group_data.items(), key=lambda item: item[1], reverse=True)
+
+    total_messages = sum(group_data.values())
+    active_members_count = len(group_data)
+
+    # Günün 1.'si
+    top_uid, top_count = sorted_users[0]
+    champion_name = names.get(top_uid, f"Kullanıcı_{top_uid}")
+
+    # İlk 3 aktif üye
+    medals = ["🥇", "🥈", "🥉"]
+    top3_lines = []
+    for idx in range(min(3, len(sorted_users))):
+        uid, count = sorted_users[idx]
+        name = names.get(uid, f"Kullanıcı_{uid}")
+        top3_lines.append(f"{medals[idx]} **{name}** — `{count}` mesaj")
+
+    top3_text = "\n".join(top3_lines)
+
+    # Aktiflik seviyesi değerlendirmesi
+    if total_messages > 500:
+        level_text = "🔥 **Alev Alev!** Grup ejderhanın nefesi gibi yanıyor!"
+    elif total_messages > 100:
+        level_text = "⚡ **Çok Canlı!** Grup oldukça aktif ve neşeli."
+    else:
+        level_text = "🌱 **Isınma Turunda!** Sohbet yavaş yavaş ısınıyor."
+
+    report_text = (
+        f"📊 **{chat_title.upper()} — GÜNLÜK GRUP RAPORU** 📊\n"
+        f"📅 **Tarih:** `{today_str}`\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💬 **Toplam Mesaj:** `{total_messages}`\n"
+        f"👥 **Aktif Üye Sayısı:** `{active_members_count}`\n"
+        f"👑 **Günün Gerçek Ejderhası:** **{champion_name}** (`{top_count}` mesaj)\n\n"
+        f"🏆 **EN AKTİF İLK 3 ÜYE:**\n"
+        f"{top3_text}\n\n"
+        f"📈 **Grup Durumu:** {level_text}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"✨ *Detaylı sıralama için: `/mesajlar` | Sosyal menü: `/sosyal`*"
+    )
+
+    await message.reply_text(report_text)

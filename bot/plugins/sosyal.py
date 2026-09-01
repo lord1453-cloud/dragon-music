@@ -2,7 +2,7 @@
 # 🐲 Ejderha Müzik Botu - Sosyal Menü Modülü
 # ============================================
 # /sosyal komutu ile interaktif eğlence, aktiflik,
-# tokat, aşk ölçer ve filtre menüsünü sunar.
+# tokat, aşk ölçer, filtre ve grup raporu menüsünü sunar.
 
 import logging
 from pyrogram import Client, filters
@@ -14,7 +14,11 @@ from pyrogram.types import (
 )
 from pyrogram.enums import ParseMode
 
-from bot.plugins.activity import _load_daily_stats, _load_user_names
+from bot.plugins.activity import (
+    _load_daily_stats,
+    _load_user_names,
+    _get_group_stats,
+)
 from bot.plugins.fun import _load_slap_stats
 
 logger = logging.getLogger(__name__)
@@ -29,8 +33,9 @@ Aşağıdaki eğlence ve topluluk komutlarıyla grubunuzu canlandırın:
 • `/slap [@kullanıcı]` — Hedefe GIF'li Osmanlı tokadı patlatır!
 • `/slapboard` — En çok tokat atan ve yiyenlerin liderlik tablosu.
 
-📊 **AKTİFLİK & ÜNVAN:**
+📊 **AKTİFLİK & GRUP ANALİZİ:**
 • `/mesajlar` — Günün mesaj kralları liderlik sıralaması.
+• `/gruprapor` — Bu grubun detaylı mesaj ve aktiflik raporu.
 • `/ejderha` — Günün birincisi **👑 GERÇEK EJDERHA** ünvan kartı.
 
 💘 **AŞK & EĞLENCE:**
@@ -58,10 +63,11 @@ def get_sosyal_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton("👑 Gerçek Ejderha", callback_data="sosyal_ejderha"),
             ],
             [
-                InlineKeyboardButton("💘 Aşk Ölçer", switch_inline_query_current_chat="/ship "),
+                InlineKeyboardButton("📈 Grup Raporu", callback_data="sosyal_gruprapor"),
                 InlineKeyboardButton("⚙️ Filtreler", callback_data="sosyal_filters"),
             ],
             [
+                InlineKeyboardButton("💘 Aşk Ölçer", switch_inline_query_current_chat="/ship "),
                 InlineKeyboardButton("🔄 Menüyü Yenile", callback_data="sosyal_refresh"),
             ],
         ]
@@ -103,18 +109,61 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
             await callback.answer("🔄 Menü güncellendi!")
             return
 
+        elif data == "sosyal_gruprapor":
+            from datetime import datetime
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            chat_title = callback.message.chat.title or "Bu Grup"
+            group_data = _get_group_stats(chat_id, today_str)
+            names = _load_user_names()
+
+            if not group_data:
+                await callback.answer("💬 Bu grupta bugün henüz kayıtlı mesaj yok!", show_alert=True)
+                return
+
+            sorted_users = sorted(group_data.items(), key=lambda item: item[1], reverse=True)
+            total_messages = sum(group_data.values())
+            active_members = len(group_data)
+
+            top_uid, top_count = sorted_users[0]
+            champion_name = names.get(top_uid, f"Kullanıcı_{top_uid}")
+
+            medals = ["🥇", "🥈", "🥉"]
+            top3_lines = []
+            for idx in range(min(3, len(sorted_users))):
+                uid, count = sorted_users[idx]
+                name = names.get(uid, f"Kullanıcı_{uid}")
+                top3_lines.append(f"{medals[idx]} **{name}** — `{count}` mesaj")
+
+            out_text = (
+                f"📊 **{chat_title.upper()} — GÜNLÜK GRUP RAPORU** 📊\n"
+                f"📅 **Tarih:** `{today_str}`\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"💬 **Toplam Mesaj:** `{total_messages}`\n"
+                f"👥 **Aktif Üye:** `{active_members}`\n"
+                f"👑 **Günün Gerçek Ejderhası:** **{champion_name}** (`{top_count}` mesaj)\n\n"
+                f"🏆 **EN AKTİF İLK 3 ÜYE:**\n"
+                + "\n".join(top3_lines) +
+                f"\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"✨ *Detaylı liste için: `/mesajlar`*"
+            )
+
+            back_kb = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")]]
+            )
+            await callback.message.edit_text(out_text, reply_markup=back_kb, parse_mode=ParseMode.MARKDOWN)
+            await callback.answer()
+
         elif data == "sosyal_mesajlar":
             from datetime import datetime
             today_str = datetime.now().strftime("%Y-%m-%d")
-            stats = _load_daily_stats()
-            today_data: dict = stats.get(today_str, {})
+            group_data = _get_group_stats(chat_id, today_str)
             names = _load_user_names()
 
-            if not today_data:
+            if not group_data:
                 await callback.answer("💬 Bugün henüz kayıtlı mesaj yok!", show_alert=True)
                 return
 
-            sorted_users = sorted(today_data.items(), key=lambda item: item[1], reverse=True)
+            sorted_users = sorted(group_data.items(), key=lambda item: item[1], reverse=True)
             medals = ["👑", "🥈", "🥉", "4️⃣", "5️⃣"]
             lines = []
             for idx, (uid, count) in enumerate(sorted_users[:5]):
@@ -168,15 +217,14 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
         elif data == "sosyal_ejderha":
             from datetime import datetime
             today_str = datetime.now().strftime("%Y-%m-%d")
-            stats = _load_daily_stats()
-            today_data: dict = stats.get(today_str, {})
+            group_data = _get_group_stats(chat_id, today_str)
             names = _load_user_names()
 
-            if not today_data:
+            if not group_data:
                 await callback.answer("🐲 Bugün henüz taht sahibi yok!", show_alert=True)
                 return
 
-            sorted_users = sorted(today_data.items(), key=lambda item: item[1], reverse=True)
+            sorted_users = sorted(group_data.items(), key=lambda item: item[1], reverse=True)
             top_uid, top_count = sorted_users[0]
             top_name = names.get(top_uid, f"Kullanıcı_{top_uid}")
 

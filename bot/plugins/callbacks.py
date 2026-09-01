@@ -68,6 +68,9 @@ async def menu_callback(client: Client, callback: CallbackQuery):
             await _safe_edit(callback, text=DOWNLOAD_HELP_TEXT, reply_markup=get_back_button())
         elif data == "menu_settings":
             await _safe_edit(callback, text=SETTINGS_TEXT, reply_markup=get_back_button())
+        elif data == "menu_sosyal":
+            from bot.plugins.sosyal import SOSYAL_MENU_TEXT, get_sosyal_keyboard
+            await _safe_edit(callback, text=SOSYAL_MENU_TEXT, reply_markup=get_sosyal_keyboard())
         elif data == "menu_developer":
             await _safe_edit(callback, text=DEVELOPER_TEXT, reply_markup=get_dev_keyboard())
     except Exception as e:
