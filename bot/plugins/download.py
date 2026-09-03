@@ -15,11 +15,12 @@ from bot.theme import (
     msg_error, msg_usage,
 )
 from utils.ytdl import search_youtube, download_audio
+from utils.decorators import clean_command
 
 logger = logging.getLogger(__name__)
 
 
-@Client.on_message(filters.command("indir"))
+@Client.on_message(clean_command("indir"))
 async def download_command(client: Client, message: Message):
     """
     /indir <şarkı adı veya link> komutu.

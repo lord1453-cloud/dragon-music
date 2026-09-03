@@ -40,11 +40,10 @@ _log_group_raw: Optional[str] = os.getenv("LOG_GROUP_ID")
 LOG_GROUP_ID: Optional[int] = int(_log_group_raw.strip().strip("'\"")) if _log_group_raw and _log_group_raw.strip() else None
 
 
-# YouTube Cookies Yapılandırması (Bot engeli / 403 aşmak için)
-_cookies_env_path: str = os.getenv("COOKIES_FILE_PATH", "cookies.txt")
+# YouTube Kimlik Doğrulama / Cookies Yapılandırması
 _base_dir: str = os.path.dirname(os.path.dirname(__file__))
 
-# Eğer ortam değişkeninden doğrudan cookie metni (COOKIES_DATA) verilmişse dosyaya yaz
+# 1. Ortam değişkeninden doğrudan Netscape çerez içeriği aktarılmışsa dosyaya yaz
 _cookies_data_env: Optional[str] = os.getenv("COOKIES_DATA") or os.getenv("YOUTUBE_COOKIES")
 if _cookies_data_env and _cookies_data_env.strip():
     _auto_cookies_file = os.path.join(_base_dir, "cookies.txt")
@@ -54,16 +53,31 @@ if _cookies_data_env and _cookies_data_env.strip():
     except Exception:
         pass
 
-_possible_cookie_paths = [
-    _cookies_env_path,
-    os.path.join(_base_dir, _cookies_env_path),
+# 2. Netscape cookie dosyası yolu tespiti
+YOUTUBE_COOKIE_FILE_PATH: Optional[str] = os.getenv("YOUTUBE_COOKIE_FILE") or os.getenv("COOKIES_FILE_PATH")
+_possible_cookie_paths = []
+if YOUTUBE_COOKIE_FILE_PATH and YOUTUBE_COOKIE_FILE_PATH.strip():
+    raw_path = YOUTUBE_COOKIE_FILE_PATH.strip().strip("'\"")
+    _possible_cookie_paths.extend([raw_path, os.path.join(_base_dir, raw_path)])
+# Standart default arama yolları
+_possible_cookie_paths.extend([
     os.path.join(_base_dir, "cookies.txt"),
-]
-COOKIES_FILE: Optional[str] = None
+    "cookies.txt",
+    "/app/cookies.txt",
+])
+
+YOUTUBE_COOKIE_FILE: Optional[str] = None
 for _cp in _possible_cookie_paths:
     if os.path.exists(_cp) and os.path.isfile(_cp) and os.path.getsize(_cp) > 10:
-        COOKIES_FILE = os.path.abspath(_cp)
+        YOUTUBE_COOKIE_FILE = os.path.abspath(_cp)
         break
+
+# Geriye dönük uyumluluk
+COOKIES_FILE: Optional[str] = YOUTUBE_COOKIE_FILE
+
+# 3. Tarayıcıdan otomatik çerez alma yapılandırması (chrome, edge, firefox, brave, opera, vivaldi vb.)
+_raw_browser = (os.getenv("YOUTUBE_COOKIES_FROM_BROWSER") or "").strip().strip("'\"").lower()
+YOUTUBE_COOKIES_FROM_BROWSER: Optional[str] = _raw_browser if _raw_browser else None
 
 # Spotify API Yapılandırması
 SPOTIFY_CLIENT_ID: Optional[str] = os.getenv("SPOTIFY_CLIENT_ID")

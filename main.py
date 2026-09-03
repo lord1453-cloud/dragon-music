@@ -92,6 +92,20 @@ async def start_services():
     logger.info("═" * 60)
     logger.info(f"🚀 {BOT_NAME} v{BOT_VERSION} Başlatılıyor...")
     logger.info(f"🕒 Başlatma Zamanı: {start_time}")
+
+    # yt-dlp sürümü ve YouTube authentication durumu loglama
+    import yt_dlp
+    logger.info(f"📦 yt-dlp version: {yt_dlp.version.__version__}")
+
+    from utils.cookie_manager import get_youtube_auth_status
+    auth_status = get_youtube_auth_status()
+    logger.info("YouTube authentication:")
+    if auth_status["type"] == "cookie_file":
+        logger.info(f"✓ {auth_status['detail']}")
+    elif auth_status["type"] == "browser":
+        logger.info(f"✓ {auth_status['detail']}")
+    else:
+        logger.info(f"○ {auth_status['detail']}")
     logger.info("═" * 60)
 
     # Eski indirme dosyalarını temizle

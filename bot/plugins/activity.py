@@ -143,7 +143,10 @@ async def message_counter_handler(client: Client, message: Message):
             message.continue_propagation()
             return
 
-        text = message.text or message.caption or ""
+        text = (message.text or message.caption or "").strip()
+        if not text:
+            message.continue_propagation()
+            return
 
         # Komutları hariç tut
         if text.startswith(("/", "!", ".")):

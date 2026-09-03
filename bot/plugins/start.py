@@ -15,6 +15,13 @@ from bot.theme import (
     get_main_menu_keyboard, get_back_button, get_dev_keyboard,
 )
 
+from bot.config import ADMIN_IDS
+from bot.theme import (
+    WELCOME_TEXT, SETTINGS_TEXT, COMMANDS_TEXT, DEVELOPER_TEXT,
+    get_main_menu_keyboard, get_back_button, get_dev_keyboard, get_help_keyboard,
+)
+from utils.decorators import clean_command, get_user_display_name, get_user_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,16 +46,17 @@ async def _safe_reply(message: Message, text: str, reply_markup=None):
 
 
 # ── /start ve /menu Komutları ─────────────────────────────────
-@Client.on_message(filters.command(["start", "menu"]))
+@Client.on_message(clean_command(["start", "menu"]))
 async def start_command(client: Client, message: Message):
     """
     /start veya /menu komutu:
     Ejderha temalı ana menüyü inline butonlarla birlikte gönderir.
-    Hem DM hem de gruplarda çalışır.
+    Hem DM hem de gruplarda çalışır (@mention destekler).
     """
     chat_type = "DM" if message.chat.type.value == "private" else "Grup"
-    user_id = message.from_user.id if message.from_user else "?"
-    logger.info(f"📥 /start komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_id}]")
+    user_display = get_user_display_name(message)
+    user_id = get_user_id(message)
+    logger.info(f"📥 /start komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_display} ({user_id})]")
 
     await _safe_reply(
         message,
@@ -58,16 +66,16 @@ async def start_command(client: Client, message: Message):
 
 
 # ── /ayarlar, /ayar, /settings Komutları ──────────────────────
-@Client.on_message(filters.command(["ayarlar", "ayar", "settings"]))
+@Client.on_message(clean_command(["ayarlar", "ayar", "settings"]))
 async def settings_command(client: Client, message: Message):
     """
     /ayarlar veya /settings komutu:
     Bot ve ses motoru ayarlarını gösterir.
-    Hem DM hem de gruplarda çalışır.
     """
     chat_type = "DM" if message.chat.type.value == "private" else "Grup"
-    user_id = message.from_user.id if message.from_user else "?"
-    logger.info(f"📥 /ayarlar komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_id}]")
+    user_display = get_user_display_name(message)
+    user_id = get_user_id(message)
+    logger.info(f"📥 /ayarlar komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_display} ({user_id})]")
 
     await _safe_reply(
         message,
@@ -76,21 +84,14 @@ async def settings_command(client: Client, message: Message):
     )
 
 
-from bot.config import ADMIN_IDS
-from bot.theme import (
-    WELCOME_TEXT, SETTINGS_TEXT, COMMANDS_TEXT, DEVELOPER_TEXT,
-    get_main_menu_keyboard, get_back_button, get_dev_keyboard, get_help_keyboard,
-)
-
 # ── /yardim, /help, /komutlar Komutları ───────────────────────
-@Client.on_message(filters.command(["yardim", "help", "komutlar", "commands"]))
+@Client.on_message(clean_command(["yardim", "help", "komutlar", "commands"]))
 async def help_command(client: Client, message: Message):
     """
     /yardim, /komutlar, /help komutu:
     Kullanılabilir tüm bot komutlarını kategorili tablo formatında listeler.
-    Hem DM hem de gruplarda çalışır.
     """
-    user_id = message.from_user.id if message.from_user else 0
+    user_id = get_user_id(message)
     is_admin = bool(ADMIN_IDS and user_id in ADMIN_IDS)
 
     await _safe_reply(
@@ -101,7 +102,7 @@ async def help_command(client: Client, message: Message):
 
 
 # ── /gelistirici, /developer Komutları ────────────────────────
-@Client.on_message(filters.command(["gelistirici", "developer", "dev"]))
+@Client.on_message(clean_command(["gelistirici", "developer", "dev"]))
 async def dev_command(client: Client, message: Message):
     """
     /gelistirici veya /developer komutu:
@@ -114,20 +115,28 @@ async def dev_command(client: Client, message: Message):
     )
 
 
-# ── Teşhis: Tüm mesajları logla (DEBUG) ──────────────────────
+# ── Teşhis & Güvenli Loglama ─────────────────────────────────
 @Client.on_message(group=99)
 async def debug_all_messages(client: Client, message: Message):
     """
-    Botun gerçekten mesaj alıp almadığını doğrulamak için
-    gelen tüm mesajları loglar. group=99 ile en son çalışır
-    ve diğer handler'ları engellemez.
+    Boş mesajları (servis mesajları, silinmişler, boş caption) filtreler,
+    yalnızca dolu mesajları loglar. Kullanıcı '?' sorununu çözer.
     """
+    # 1. & 2. text ve caption boş mu kontrol et
+    raw_text = message.text or message.caption
+    # 3. İkisi de boşsa loglamadan ve işlemeden çık
+    if not raw_text or not raw_text.strip():
+        message.continue_propagation()
+        return
+
     chat_type = message.chat.type if message.chat else "?"
-    text = (message.text or message.caption or "")[:50]
-    logger.info(
-        f"🔍 [DEBUG] Mesaj alındı - "
-        f"Chat: {message.chat.id} ({chat_type}), "
-        f"From: {message.from_user.id if message.from_user else '?'}, "
-        f"Text: '{text}'"
+    clean_snippet = raw_text.strip()[:50]
+    user_info = get_user_display_name(message)
+    user_id = get_user_id(message)
+
+    logger.debug(
+        f"🔍 Mesaj: Chat: {message.chat.id} ({chat_type}), "
+        f"Gönderen: {user_info} [{user_id}], "
+        f"Metin: '{clean_snippet}'"
     )
     message.continue_propagation()

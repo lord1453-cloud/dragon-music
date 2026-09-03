@@ -24,7 +24,7 @@ from utils.ytdl import (
     get_video_file_for_stream,
     cleanup_old_streams,
 )
-from utils.decorators import check_voice_chat
+from utils.decorators import check_voice_chat, clean_command
 from bot.plugins.play import make_stream
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ async def voice_chat_active(client: Client, chat_id: int) -> bool:
 
 
 # ── İnteraktif Kontrol Paneli Komutları ────────────────────────
-@Client.on_message(filters.command(["panel", "kontrol", "cpanel", "dashboard"]))
+@Client.on_message(clean_command(["panel", "kontrol", "cpanel", "dashboard"]))
 async def panel_command(client: Client, message: Message):
     """
     /panel veya /kontrol komutu:
@@ -83,7 +83,7 @@ async def panel_command(client: Client, message: Message):
 
 
 # ── Canlı Sistem İstatistikleri Komutu ────────────────────────
-@Client.on_message(filters.command(["stats", "istatistik", "durum"]))
+@Client.on_message(clean_command(["stats", "istatistik", "durum"]))
 async def stats_command(client: Client, message: Message):
     """
     /stats veya /durum komutu:
@@ -96,7 +96,7 @@ async def stats_command(client: Client, message: Message):
     )
 
 
-@Client.on_message(filters.command(["duraklat", "pause", "durdur"]) & filters.group)
+@Client.on_message(clean_command(["duraklat", "pause", "durdur"]) & filters.group)
 @check_voice_chat()
 async def pause_command(client: Client, message: Message):
     """
@@ -117,7 +117,7 @@ async def pause_command(client: Client, message: Message):
         await message.reply_text(msg_error(str(e)))
 
 
-@Client.on_message(filters.command(["devam", "resume", "baslat"]) & filters.group)
+@Client.on_message(clean_command(["devam", "resume", "baslat"]) & filters.group)
 @check_voice_chat()
 async def resume_command(client: Client, message: Message):
     """
@@ -138,7 +138,7 @@ async def resume_command(client: Client, message: Message):
         await message.reply_text(msg_error(str(e)))
 
 
-@Client.on_message(filters.command(["gec", "atla", "skip", "next"]) & filters.group)
+@Client.on_message(clean_command(["gec", "atla", "skip", "next"]) & filters.group)
 @check_voice_chat()
 async def skip_command(client: Client, message: Message):
     """
@@ -196,7 +196,7 @@ async def skip_command(client: Client, message: Message):
         asyncio.create_task(cleanup_old_streams())
 
 
-@Client.on_message(filters.command(["bitir", "dur", "son", "stop", "kapat", "leave", "ayril"]) & filters.group)
+@Client.on_message(clean_command(["bitir", "dur", "son", "stop", "kapat", "leave", "ayril"]) & filters.group)
 @check_voice_chat()
 async def stop_command(client: Client, message: Message):
     """
@@ -215,7 +215,7 @@ async def stop_command(client: Client, message: Message):
     asyncio.create_task(cleanup_old_streams())
 
 
-@Client.on_message(filters.command(["karistir", "shuffle"]) & filters.group)
+@Client.on_message(clean_command(["karistir", "shuffle"]) & filters.group)
 @check_voice_chat()
 async def shuffle_command(client: Client, message: Message):
     """
@@ -235,7 +235,7 @@ async def shuffle_command(client: Client, message: Message):
             await message.reply_text(msg_not_playing())
 
 
-@Client.on_message(filters.command(["temizle", "clear", "sirasifirla"]) & filters.group)
+@Client.on_message(clean_command(["temizle", "clear", "sirasifirla"]) & filters.group)
 @check_voice_chat()
 async def clear_command(client: Client, message: Message):
     """

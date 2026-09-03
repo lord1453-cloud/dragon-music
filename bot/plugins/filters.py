@@ -14,6 +14,8 @@ from pyrogram import Client, filters
 from pyrogram.types import Message, ChatMemberUpdated
 from pyrogram.enums import ChatMemberStatus, ChatType
 
+from utils.decorators import clean_command
+
 logger = logging.getLogger(__name__)
 
 # ── Dosya Yolları ─────────────────────────────────────────────
@@ -104,7 +106,7 @@ async def _is_admin(client: Client, message: Message) -> bool:
 # ══════════════════════════════════════════════════════════════
 # 1. FİLTRE EKLEME KOMUTU (/filter, /filtre)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["filter", "filtre"]) & filters.group)
+@Client.on_message(clean_command(["filter", "filtre"]) & filters.group)
 async def add_filter_command(client: Client, message: Message):
     """
     /filter <tetikleyici> <yanıt> veya bir mesaja yanıtlayarak /filter <tetikleyici>
@@ -167,7 +169,7 @@ async def add_filter_command(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 # 2. FİLTRE SİLME KOMUTU (/stop, /stopfilter, /filtresil)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["stopfilter", "stop", "filtresil", "durdurfiltre"]) & filters.group)
+@Client.on_message(clean_command(["stopfilter", "stop", "filtresil", "durdurfiltre"]) & filters.group)
 async def stop_filter_command(client: Client, message: Message):
     """
     /stop <tetikleyici> veya /filtresil <tetikleyici>
@@ -193,7 +195,7 @@ async def stop_filter_command(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 # 3. TÜM FİLTRELERİ SİLME KOMUTU (/stopall, /tumfiltrelerisil)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["stopall", "tumfiltrelerisil", "clearfilters"]) & filters.group)
+@Client.on_message(clean_command(["stopall", "tumfiltrelerisil", "clearfilters"]) & filters.group)
 async def stop_all_filters_command(client: Client, message: Message):
     """
     /stopall komutu:
@@ -213,7 +215,7 @@ async def stop_all_filters_command(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 # 4. FİLTRELERİ LİSTELEME KOMUTU (/filters, /filtreler)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["filters", "filtreler"]) & filters.group)
+@Client.on_message(clean_command(["filters", "filtreler"]) & filters.group)
 async def list_filters_command(client: Client, message: Message):
     """
     /filters veya /filtreler komutu:
@@ -259,7 +261,7 @@ async def filter_trigger_handler(client: Client, message: Message):
     - group=15 ile çalışır, diğer eklentileri engellemez.
     """
     try:
-        text = message.text or message.caption
+        text = (message.text or message.caption or "").strip()
         if not text:
             message.continue_propagation()
             return

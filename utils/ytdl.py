@@ -26,7 +26,13 @@ from collections import OrderedDict
 
 import yt_dlp
 
-from bot.config import AUDIO_BITRATE, DOWNLOADS_DIR, COOKIES_FILE
+from bot.config import (
+    AUDIO_BITRATE,
+    DOWNLOADS_DIR,
+    COOKIES_FILE,
+    YOUTUBE_COOKIE_FILE,
+    YOUTUBE_COOKIES_FROM_BROWSER,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,19 +100,94 @@ _in_flight_downloads: Dict[str, asyncio.Future] = {}
 _in_flight_lock = asyncio.Lock()
 
 
-from utils.cookie_manager import get_effective_cookiefile, GUEST_COOKIES_FILE, is_user_cookie_valid
+from utils.cookie_manager import (
+    validate_cookie_file,
+    is_user_cookie_valid,
+    get_browser_cookie_config,
+    get_youtube_auth_status,
+    GUEST_COOKIES_FILE,
+)
 
-# ── 3. Cookie Durum Kontrolü ──────────────────────────────────
-def check_cookies_status(cookie_path: Optional[str] = COOKIES_FILE) -> bool:
+# ── 3. YouTube Kimlik Doğrulama & Çerez Öncelik Zinciri ────────
+def _is_bot_challenge(err_msg: Any) -> bool:
+    """yt-dlp veya YouTube hata mesajının bot kontrolü olup olmadığını tespit eder."""
+    err_str = str(err_msg).lower()
+    return (
+        "sign in to confirm you're not a bot" in err_str or
+        "confirm you're not a bot" in err_str or
+        "confirm you’re not a bot" in err_str or
+        "bot confirmation" in err_str or
+        "use --cookies" in err_str
+    )
+
+
+def _classify_error(err_str: str) -> Exception:
+    """yt-dlp hata metnini analiz edip uygun hata tipine dönüştürür."""
+    if _is_bot_challenge(err_str):
+        return YouTubeBotChallengeError("YouTube bot doğrulama kontrolü istedi.")
+    err_lower = err_str.lower()
+    if "429" in err_str or "too many requests" in err_lower or "rate-limit" in err_lower:
+        return YouTubeRateLimitError("YouTube hız sınırı (429) aşıldı.")
+    elif "video unavailable" in err_lower or "private video" in err_lower or "blocked" in err_lower:
+        return YouTubeVideoUnavailableError("Video erişilemez, silinmiş veya kısıtlı.")
+    return YTDLError(err_str)
+
+
+def _get_auth_strategies() -> list:
+    """
+    YouTube işlemleri için öncelik sırasına göre kimlik doğrulama stratejilerini üretir:
+    1. YOUTUBE_COOKIE_FILE (veya COOKIES_FILE) varsa ve geçerliyse
+    2. YOUTUBE_COOKIES_FROM_BROWSER yapılandırılmışsa (chrome, edge, firefox vb.)
+    3. Standart / Çerezsiz deneme
+    """
+    strategies = []
+
+    # 1. Öncelik: Cookie File
+    cookie_path = YOUTUBE_COOKIE_FILE or COOKIES_FILE
+    if cookie_path:
+        if os.path.exists(cookie_path):
+            is_valid, reason = validate_cookie_file(cookie_path)
+            if is_valid:
+                strategies.append({
+                    "type": "cookiefile",
+                    "cookiefile": cookie_path,
+                    "label": f"Cookie File ({os.path.basename(cookie_path)})",
+                })
+            else:
+                logger.warning(f"⚠️ YouTube cookie authentication başarısız: {reason}")
+        else:
+            logger.warning(f"⚠️ YouTube cookie dosyası bulunamadı: {cookie_path}")
+
+    # 2. Öncelik: Tarayıcı Çerezleri (cookiesfrombrowser)
+    browser = get_browser_cookie_config()
+    if browser:
+        strategies.append({
+            "type": "browser",
+            "browser": browser,
+            "cookiesfrombrowser": (browser,),
+            "label": f"Browser Cookies ({browser})",
+        })
+
+    # 3. Öncelik: Standart Çerezsiz İstek
+    strategies.append({
+        "type": "none",
+        "label": "Standart (Çerezsiz)",
+    })
+
+    return strategies
+
+
+def check_cookies_status(cookie_path: Optional[str] = None) -> bool:
     """Kullanıcının sağladığı cookies.txt dosyasının geçerliliğini kontrol eder."""
-    return is_user_cookie_valid(cookie_path)
+    return is_user_cookie_valid(cookie_path or YOUTUBE_COOKIE_FILE or COOKIES_FILE)
 
 
 # ── 4. Temel yt-dlp Yapılandırması ─────────────────────────────
-def _get_base_opts(cookiefile: Optional[str] = None) -> dict:
+def _get_base_opts(strategy: Optional[dict] = None) -> dict:
     """
     yt-dlp için optimize edilmiş temel yapılandırma.
     Aşırı yüklenmeyi, uzun asılı kalmaları ve gereksiz veri transferini önler.
+    Çerez içeriklerini ASLA loglamaz.
     """
     opts: Dict[str, Any] = {
         "quiet": True,
@@ -120,7 +201,15 @@ def _get_base_opts(cookiefile: Optional[str] = None) -> dict:
         "skip_unavailable_fragments": True,
         "ignoreerrors": False,
         "no_color": True,
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/128.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        },
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "web", "tv"],
@@ -129,18 +218,11 @@ def _get_base_opts(cookiefile: Optional[str] = None) -> dict:
         },
     }
 
-    # Belirtilen veya geçerli olan en uygun çerez dosyasını dahil et
-    chosen_cookie = cookiefile
-    if not chosen_cookie:
-        if os.path.exists("/app/cookies.txt") and os.path.getsize("/app/cookies.txt") > 10:
-            chosen_cookie = "/app/cookies.txt"
-        elif is_user_cookie_valid(COOKIES_FILE):
-            chosen_cookie = COOKIES_FILE
-        elif os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 50:
-            chosen_cookie = GUEST_COOKIES_FILE
-
-    if chosen_cookie and os.path.exists(chosen_cookie):
-        opts["cookiefile"] = chosen_cookie
+    if strategy:
+        if strategy.get("type") == "cookiefile" and strategy.get("cookiefile"):
+            opts["cookiefile"] = strategy["cookiefile"]
+        elif strategy.get("type") == "browser" and strategy.get("cookiesfrombrowser"):
+            opts["cookiesfrombrowser"] = strategy["cookiesfrombrowser"]
 
     return opts
 
@@ -163,18 +245,6 @@ def _format_duration(seconds: Optional[int]) -> str:
 def _is_valid_file(path: str) -> bool:
     """Dosyanın var olduğunu ve minimum boyutta olduğunu doğrular."""
     return os.path.exists(path) and os.path.getsize(path) > MIN_VALID_FILE_SIZE
-
-
-def _classify_error(err_str: str) -> Exception:
-    """yt-dlp hata metnini analiz edip uygun hata tipine dönüştürür."""
-    err_lower = err_str.lower()
-    if "sign in to confirm you're not a bot" in err_lower or "confirm you're not a bot" in err_lower:
-        return YouTubeBotChallengeError("YouTube bot doğrulama kontrolü istedi.")
-    elif "429" in err_str or "too many requests" in err_lower or "rate-limit" in err_lower:
-        return YouTubeRateLimitError("YouTube hız sınırı (429) aşıldı.")
-    elif "video unavailable" in err_lower or "private video" in err_lower or "blocked" in err_lower:
-        return YouTubeVideoUnavailableError("Video erişilemez, silinmiş veya kısıtlı.")
-    return YTDLError(err_str)
 
 
 # ── 5. YouTube Arama Fonksiyonu ────────────────────────────────
@@ -201,20 +271,22 @@ async def search_youtube(query: str) -> Optional[dict]:
     is_direct_url = query.startswith(("http://", "https://"))
     target = query if is_direct_url else f"ytsearch:1:{query}"
 
-    opts = {
-        **_get_base_opts(),
-        "extract_flat": "in_playlist",
-        "skip_download": True,
-    }
-
     def _sync_search() -> Optional[dict]:
-        max_attempts = 2
-        for attempt in range(1, max_attempts + 1):
+        strategies = _get_auth_strategies()
+        bot_challenge_detected = False
+
+        for strategy in strategies:
+            strat_label = strategy.get("label", "Auth")
             try:
+                opts = {
+                    **_get_base_opts(strategy),
+                    "extract_flat": "in_playlist",
+                    "skip_download": True,
+                }
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(target, download=False)
                     if not info:
-                        return None
+                        continue
 
                     entries = []
                     if "entries" in info and info["entries"]:
@@ -223,7 +295,7 @@ async def search_youtube(query: str) -> Optional[dict]:
                         entries = [info]
 
                     if not entries:
-                        return None
+                        continue
 
                     entry = entries[0]
                     vid = entry.get("id", "")
@@ -243,13 +315,17 @@ async def search_youtube(query: str) -> Optional[dict]:
                     }
             except Exception as e:
                 err_text = str(e)
-                logger.warning(f"YouTube arama denemesi {attempt}/{max_attempts} hatası ({query}): {err_text}")
-                if attempt < max_attempts:
-                    # Exponential backoff + jitter
-                    sleep_time = (0.5 * (2 ** attempt)) + random.uniform(0.1, 0.4)
-                    time.sleep(sleep_time)
+                if _is_bot_challenge(err_text):
+                    bot_challenge_detected = True
+                    logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
+                    logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
                 else:
-                    break
+                    logger.warning(f"YouTube arama uyarısı ({strat_label}): {err_text.splitlines()[0]}")
+                continue
+
+        if bot_challenge_detected:
+            logger.warning("⚠️ YouTube bot doğrulaması nedeniyle arama tamamlanamadı.")
         return None
 
     loop = asyncio.get_event_loop()
@@ -257,14 +333,13 @@ async def search_youtube(query: str) -> Optional[dict]:
 
     if result:
         await _search_cache.set(cache_key, result)
-        # URL bazlı da önbelleğe al
         if result.get("url"):
             await _search_cache.set(f"search:{result['url'].lower()}", result)
         return result
 
     # 2. YouTube araması başarısız olursa SoundCloud Fallback
     if not is_direct_url:
-        logger.info(f"🔄 YouTube araması sonuç vermedi, alternatif SoundCloud arama deneniyor: {query}")
+        logger.info(f"🔄 YouTube akışı engellendi/hata verdi, SoundCloud yedeği devreye giriyor: {query}")
         sc_opts = {
             **_get_base_opts(),
             "extract_flat": "in_playlist",
@@ -323,58 +398,98 @@ async def get_audio_url(query: str) -> Optional[str]:
     is_direct_url = query.startswith(("http://", "https://"))
     target = query if is_direct_url else f"ytsearch:1:{query}"
 
-    opts = {
-        **_get_base_opts(),
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
-        "skip_download": True,
-    }
-
-    # Docker cookies kontrolü
-    if os.path.exists("/app/cookies.txt") and os.path.getsize("/app/cookies.txt") > 10:
-        opts["cookiefile"] = "/app/cookies.txt"
-
     def _sync_get_audio_url() -> Optional[str]:
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(target, download=False)
-                if not info:
-                    return None
+        strategies = _get_auth_strategies()
+        bot_challenge_encountered = False
 
-                entries = []
-                if "entries" in info and info["entries"]:
-                    entries = [e for e in info["entries"] if e]
-                elif info:
-                    entries = [info]
+        audio_format_candidates = [
+            "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+            "bestaudio/best",
+            "ba/b",
+            "best",
+        ]
 
-                if not entries:
-                    return None
+        for strategy in strategies:
+            strat_label = strategy.get("label", "Auth")
+            for afmt in audio_format_candidates:
+                try:
+                    current_opts = {
+                        **_get_base_opts(strategy),
+                        "format": afmt,
+                        "skip_download": True,
+                    }
+                    with yt_dlp.YoutubeDL(current_opts) as ydl:
+                        logger.debug(f"🔐 YouTube authentication deneniyor ({strat_label})...")
+                        info = ydl.extract_info(target, download=False)
+                        if not info:
+                            continue
 
-                entry = entries[0]
-                direct_url = entry.get("url")
-                if direct_url and str(direct_url).startswith("http"):
-                    return direct_url
+                        entries = []
+                        if "entries" in info and info["entries"]:
+                            entries = [e for e in info["entries"] if e]
+                        elif info:
+                            entries = [info]
 
-                formats = entry.get("formats", [])
-                audio_formats = [
-                    f for f in formats
-                    if f.get("url") and (f.get("vcodec") == "none" or "audio" in f.get("mime_type", ""))
-                ]
-                if audio_formats:
-                    # En yüksek bit hızına sahip ses formatını seç
-                    audio_formats.sort(key=lambda x: x.get("abr") or x.get("tbr") or 0, reverse=True)
-                    return audio_formats[0]["url"]
+                        if not entries:
+                            continue
 
-                if formats:
-                    return formats[-1].get("url")
-        except Exception as e:
-            logger.warning(f"get_audio_url YouTube hatası ({query}): {e}")
+                        entry = entries[0]
+                        direct_url = entry.get("url")
+                        video_title = entry.get("title") or query
+                        if direct_url and str(direct_url).startswith("http"):
+                            logger.info(f"🎵 YouTube: {video_title}")
+                            logger.info("🔐 YouTube authentication hazır")
+                            logger.info("📥 Audio stream alınıyor...")
+                            logger.info("✅ YouTube audio stream başarılı")
+                            return direct_url
+
+                        formats = entry.get("formats", [])
+                        audio_formats = [
+                            f for f in formats
+                            if f.get("url") and (f.get("vcodec") == "none" or "audio" in f.get("mime_type", ""))
+                        ]
+                        if audio_formats:
+                            audio_formats.sort(key=lambda x: x.get("abr") or x.get("tbr") or 0, reverse=True)
+                            chosen_url = audio_formats[0]["url"]
+                            logger.info(f"🎵 YouTube: {video_title}")
+                            logger.info("🔐 YouTube authentication hazır")
+                            logger.info("📥 Audio stream alınıyor...")
+                            logger.info("✅ YouTube audio stream başarılı")
+                            return chosen_url
+
+                        if formats:
+                            chosen_url = formats[-1].get("url")
+                            logger.info(f"🎵 YouTube: {video_title}")
+                            logger.info("🔐 YouTube authentication hazır")
+                            logger.info("📥 Audio stream alınıyor...")
+                            logger.info("✅ YouTube audio stream başarılı")
+                            return chosen_url
+                except Exception as e:
+                    err_text = str(e)
+                    if _is_bot_challenge(err_text):
+                        bot_challenge_encountered = True
+                        logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                        break
+                    elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
+                        logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
+                        break
+                    else:
+                        logger.debug(f"get_audio_url ({strat_label}/{afmt}) uyarısı: {err_text.splitlines()[0]}")
+                        continue
+
+        if bot_challenge_encountered:
+            logger.warning("⚠️ YouTube bot doğrulaması nedeniyle ses akışı alınamadı.")
+            logger.info("🔄 SoundCloud fallback deneniyor...")
+        else:
+            logger.warning("⚠️ YouTube authentication başarısız veya ses akışı alınamadı.")
 
         # SoundCloud failover yedeği
         if not is_direct_url:
+            logger.info(f"🔄 SoundCloud fallback devreye giriyor: {query}")
             try:
                 sc_opts = {
                     **_get_base_opts(),
-                    "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+                    "format": "bestaudio/best",
                     "skip_download": True,
                 }
                 with yt_dlp.YoutubeDL(sc_opts) as ydl:
@@ -382,9 +497,10 @@ async def get_audio_url(query: str) -> Optional[str]:
                     if info and "entries" in info and info["entries"]:
                         entry = info["entries"][0]
                         if entry and entry.get("url"):
+                            logger.info(f"✅ SoundCloud fallback üzerinden ses akışı sağlandı: {entry.get('title') or query}")
                             return entry.get("url")
             except Exception as sc_err:
-                logger.debug(f"get_audio_url SoundCloud yedeği hatası: {sc_err}")
+                logger.error(f"get_audio_url SoundCloud yedeği hatası: {sc_err}")
 
         return None
 
@@ -432,45 +548,77 @@ async def download_audio(query: Optional[str] = None, info: Optional[dict] = Non
             "duration_str": info.get("duration_str", "Bilinmiyor"),
         }
 
-    opts = {
-        **_get_base_opts(),
-        "format": "bestaudio/best",
-        "outtmpl": output_path.replace(".mp3", ".%(ext)s"),
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": str(AUDIO_BITRATE),
-            }
-        ],
-    }
-
     def _sync_download():
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([url])
+        strategies = _get_auth_strategies()
+        bot_challenge_encountered = False
 
-            if _is_valid_file(output_path):
-                return {
-                    "title": info["title"],
-                    "file_path": output_path,
-                    "duration": info.get("duration", 0),
-                    "duration_str": info.get("duration_str", "Bilinmiyor"),
-                }
-        except Exception as e:
-            logger.warning(f"MP3 indirme hatası ({url}): {e}")
+        for strategy in strategies:
+            strat_label = strategy.get("label", "Auth")
+            opts = {
+                **_get_base_opts(strategy),
+                "format": "bestaudio/best",
+                "outtmpl": output_path.replace(".mp3", ".%(ext)s"),
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": str(AUDIO_BITRATE),
+                    }
+                ],
+            }
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    logger.debug(f"🔐 YouTube authentication deneniyor ({strat_label})...")
+                    ydl.download([url])
+
+                if _is_valid_file(output_path):
+                    logger.info(f"🎵 YouTube: {info['title']}")
+                    logger.info("🔐 YouTube authentication hazır")
+                    logger.info("📥 Audio stream alınıyor...")
+                    logger.info("✅ YouTube audio stream başarılı")
+                    return {
+                        "title": info["title"],
+                        "file_path": output_path,
+                        "duration": info.get("duration", 0),
+                        "duration_str": info.get("duration_str", "Bilinmiyor"),
+                    }
+            except Exception as e:
+                err_text = str(e)
+                if _is_bot_challenge(err_text):
+                    bot_challenge_encountered = True
+                    logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
+                    logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
+                else:
+                    logger.warning(f"MP3 indirme uyarısı ({strat_label}): {err_text.splitlines()[0]}")
+                continue
+
+        if bot_challenge_encountered:
+            logger.warning("⚠️ YouTube bot doğrulaması nedeniyle ses akışı alınamadı.")
+            logger.info("🔄 SoundCloud fallback deneniyor...")
+        else:
+            logger.warning("⚠️ YouTube authentication başarısız veya ses akışı alınamadı.")
 
         # Başarısız olursa SoundCloud fallback ile indirmeyi dene
         try:
-            logger.info(f"🔄 YouTube MP3 indirme başarısız, SoundCloud yedeği deneniyor: {info['title']}")
+            logger.info(f"🔄 SoundCloud yedeği deneniyor: {info['title']}")
             sc_opts = {
-                **opts,
+                **_get_base_opts(),
+                "format": "bestaudio/best",
                 "outtmpl": output_path.replace(".mp3", ".%(ext)s"),
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": str(AUDIO_BITRATE),
+                    }
+                ],
             }
             with yt_dlp.YoutubeDL(sc_opts) as ydl:
                 ydl.download([f"scsearch1:{info['title']}"])
 
             if _is_valid_file(output_path):
+                logger.info(f"✅ SoundCloud üzerinden MP3 başarıyla indirildi: {output_path}")
                 return {
                     "title": info["title"],
                     "file_path": output_path,
@@ -546,47 +694,84 @@ async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Op
                 except Exception:
                     pass
 
-        opts = {
-            **_get_base_opts(),
-            "format": "bestaudio/best",
-            "outtmpl": output_template,
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "opus",
-                    "preferredquality": "128",
-                }
-            ],
-            "postprocessor_args": {
-                "FFmpegExtractAudio": [
-                    "-ac", "2",
-                    "-ar", "48000",
-                ],
-            },
-        }
-
         def _sync_worker():
-            # 1. Ana YouTube İndirme Denemesi
-            try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    ydl.download([url])
+            strategies = _get_auth_strategies()
+            bot_challenge_encountered = False
 
-                for candidate in [final_path, fallback_path, mp3_path]:
-                    if _is_valid_file(candidate):
-                        return candidate
+            audio_formats = [
+                "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+                "bestaudio/best",
+                "ba/b",
+                "best",
+            ]
 
-                for ext in [".opus", ".ogg", ".mp3", ".m4a", ".webm"]:
-                    candidate = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}{ext}")
-                    if _is_valid_file(candidate):
-                        return candidate
-            except Exception as e:
-                err_classified = _classify_error(str(e))
-                logger.warning(f"YouTube ses akışı indirme uyarısı ({url}): {err_classified}")
+            for strategy in strategies:
+                strat_label = strategy.get("label", "Auth")
+                opts = {
+                    **_get_base_opts(strategy),
+                    "format": "bestaudio/best",
+                    "outtmpl": output_template,
+                    "postprocessors": [
+                        {
+                            "key": "FFmpegExtractAudio",
+                            "preferredcodec": "opus",
+                            "preferredquality": "128",
+                        }
+                    ],
+                    "postprocessor_args": {
+                        "FFmpegExtractAudio": [
+                            "-ac", "2",
+                            "-ar", "48000",
+                        ],
+                    },
+                }
+
+                for afmt in audio_formats:
+                    try:
+                        current_opts = {**opts, "format": afmt}
+                        with yt_dlp.YoutubeDL(current_opts) as ydl:
+                            logger.debug(f"🔐 YouTube authentication deneniyor ({strat_label})...")
+                            ydl.download([url])
+
+                        for candidate in [final_path, fallback_path, mp3_path]:
+                            if _is_valid_file(candidate):
+                                logger.info(f"🎵 YouTube: {title or url}")
+                                logger.info("🔐 YouTube authentication hazır")
+                                logger.info("📥 Audio stream alınıyor...")
+                                logger.info(f"✅ YouTube audio stream başarılı: {candidate}")
+                                return candidate
+
+                        for ext in [".opus", ".ogg", ".mp3", ".m4a", ".webm"]:
+                            candidate = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}{ext}")
+                            if _is_valid_file(candidate):
+                                logger.info(f"🎵 YouTube: {title or url}")
+                                logger.info("🔐 YouTube authentication hazır")
+                                logger.info("📥 Audio stream alınıyor...")
+                                logger.info(f"✅ YouTube audio stream başarılı: {candidate}")
+                                return candidate
+                    except Exception as e:
+                        err_text = str(e)
+                        if _is_bot_challenge(err_text):
+                            bot_challenge_encountered = True
+                            logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                            break
+                        elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
+                            logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
+                            break
+                        else:
+                            logger.warning(f"YouTube ses akışı format ({afmt}) uyarısı ({strat_label}): {err_text.splitlines()[0]}")
+                            continue
 
             # 2. SoundCloud Failover
             search_query = title or (url.split("watch?v=")[-1] if "watch?v=" in url else url)
+            if bot_challenge_encountered:
+                logger.warning("⚠️ YouTube bot doğrulaması nedeniyle ses akışı alınamadı.")
+                logger.info(f"🔄 SoundCloud fallback deneniyor: {search_query}")
+            else:
+                logger.warning("⚠️ YouTube authentication başarısız veya ses akışı alınamadı.")
+                logger.info(f"🔄 SoundCloud fallback devreye giriyor: {search_query}")
+
             try:
-                logger.info(f"🔄 YouTube akışı engellendi/hata verdi, SoundCloud yedeği devreye giriyor: {search_query}")
                 sc_opts = {
                     **_get_base_opts(),
                     "format": "bestaudio/best",
@@ -610,6 +795,7 @@ async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Op
                 for ext in [".opus", ".ogg", ".mp3", ".m4a", ".webm"]:
                     candidate = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}{ext}")
                     if _is_valid_file(candidate):
+                        logger.info(f"✅ SoundCloud failover ile ses akışı hazırlandı: {candidate}")
                         return candidate
             except Exception as sc_err:
                 logger.error(f"SoundCloud ses failover hatası: {sc_err}")
@@ -685,37 +871,58 @@ async def get_video_file_for_stream(url: str) -> Optional[str]:
             except Exception:
                 pass
 
-        opts = {
-            **_get_base_opts(),
-            "format": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best",
-            "outtmpl": output_template,
-            "merge_output_format": "mp4",
-            "postprocessor_args": {
-                "FFmpegVideoConvertor": [
-                    "-c:v", "libx264",
-                    "-preset", "veryfast",
-                    "-crf", "23",
-                    "-c:a", "aac",
-                    "-b:a", "128k",
-                    "-ar", "48000",
-                ],
-            },
-        }
-
         def _sync_vworker():
-            try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    ydl.download([url])
+            strategies = _get_auth_strategies()
+            vformats = [
+                "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best",
+                "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+                "best[height<=720]/best",
+                "best",
+            ]
+            for strategy in strategies:
+                strat_label = strategy.get("label", "Auth")
+                opts = {
+                    **_get_base_opts(strategy),
+                    "format": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best",
+                    "outtmpl": output_template,
+                    "merge_output_format": "mp4",
+                    "postprocessor_args": {
+                        "FFmpegVideoConvertor": [
+                            "-c:v", "libx264",
+                            "-preset", "veryfast",
+                            "-crf", "23",
+                            "-c:a", "aac",
+                            "-b:a", "128k",
+                            "-ar", "48000",
+                        ],
+                    },
+                }
+                for vfmt in vformats:
+                    try:
+                        current_opts = {**opts, "format": vfmt}
+                        with yt_dlp.YoutubeDL(current_opts) as ydl:
+                            ydl.download([url])
 
-                if _is_valid_file(final_path):
-                    return final_path
+                        if _is_valid_file(final_path):
+                            logger.info(f"✅ YouTube video akışı başarılı: {final_path}")
+                            return final_path
 
-                for ext in [".mp4", ".mkv", ".webm"]:
-                    candidate = os.path.join(DOWNLOADS_DIR, f"vstream_{file_hash}{ext}")
-                    if _is_valid_file(candidate):
-                        return candidate
-            except Exception as e:
-                logger.error(f"Video stream indirme hatası ({url}): {e}")
+                        for ext in [".mp4", ".mkv", ".webm"]:
+                            candidate = os.path.join(DOWNLOADS_DIR, f"vstream_{file_hash}{ext}")
+                            if _is_valid_file(candidate):
+                                logger.info(f"✅ YouTube video akışı başarılı: {candidate}")
+                                return candidate
+                    except Exception as e:
+                        err_text = str(e)
+                        if _is_bot_challenge(err_text):
+                            logger.warning(f"⚠️ YouTube video bot doğrulaması tespit edildi ({strat_label}).")
+                            break
+                        elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
+                            logger.warning(f"⚠️ YouTube video cookie authentication hatası ({strat_label}).")
+                            break
+                        else:
+                            logger.warning(f"Video format ({vfmt}) denenirken uyarı ({strat_label}): {err_text.splitlines()[0]}")
+                            continue
             return None
 
         async with _download_semaphore:

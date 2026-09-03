@@ -6,6 +6,8 @@
 __pycache__/
 .cache/
 downloads/
+cookies.txt
+*.cookies
 guest_cookies.txt
 data/*.json
 data/*.db

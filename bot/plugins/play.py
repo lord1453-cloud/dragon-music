@@ -44,6 +44,7 @@ from utils.ytdl import (
     YouTubeBotChallengeError,
 )
 from utils.spotify import is_spotify_url, get_spotify_tracks
+from utils.decorators import clean_command, get_user_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +270,7 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
 
     raw_query = " ".join(message.command[1:]).strip()
     chat_id = message.chat.id
-    requester = message.from_user.first_name if message.from_user else "Bilinmeyen"
+    requester = get_user_display_name(message)
 
     # Kuyruk limit kontrolü: Çalan şarkı varsa ve kuyruk 20 limitine ulaştıysa doğrudan uyar
     is_playing = await queue.has_current(chat_id)
@@ -446,14 +447,15 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
 
 
 # ── Komut Kayıtları (Doğrudan Otomatik Bağlanma) ───────────────
+# clean_command sayesinde hem /oynat hem de /oynat@PixelMuzikBot sorunsuz çalışır
 
-@Client.on_message(filters.command(["oynat", "play"]) & filters.group)
+@Client.on_message(clean_command(["oynat", "play"]) & filters.group)
 async def play_command(client: Client, message: Message):
     """/oynat veya /play: Sesli sohbette müzik çalar (otomatik bağlanır)."""
     await _process_play(client, message, is_video=False)
 
 
-@Client.on_message(filters.command(["voynat", "vplay", "video"]) & filters.group)
+@Client.on_message(clean_command(["voynat", "vplay", "video"]) & filters.group)
 async def vplay_command(client: Client, message: Message):
     """/voynat, /vplay veya /video: Sesli sohbette 720p görüntülü yayın başlatır (otomatik bağlanır)."""
     await _process_play(client, message, is_video=True)
