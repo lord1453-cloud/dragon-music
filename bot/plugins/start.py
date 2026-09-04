@@ -84,21 +84,9 @@ async def settings_command(client: Client, message: Message):
     )
 
 
-# ── /yardim, /help, /komutlar Komutları ───────────────────────
-@Client.on_message(clean_command(["yardim", "help", "komutlar", "commands"]))
-async def help_command(client: Client, message: Message):
-    """
-    /yardim, /komutlar, /help komutu:
-    Kullanılabilir tüm bot komutlarını kategorili tablo formatında listeler.
-    """
-    user_id = get_user_id(message)
-    is_admin = bool(ADMIN_IDS and user_id in ADMIN_IDS)
+# ── /yardim, /help, /komutlar (bot/plugins/help.py üzerinden yönetilir) ──
+from bot.plugins.help import komutlar_command as help_command
 
-    await _safe_reply(
-        message,
-        text=COMMANDS_TEXT,
-        reply_markup=get_help_keyboard(is_admin=is_admin),
-    )
 
 
 # ── /gelistirici, /developer Komutları ────────────────────────

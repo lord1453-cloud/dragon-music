@@ -87,6 +87,7 @@ def _get_auth_opts() -> dict:
             "youtube": {
                 "player_client": ["android", "web"],
                 "player_skip": ["configs", "webpage"],
+                "lang": ["tr"],
             }
         },
     }

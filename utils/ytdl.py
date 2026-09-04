@@ -182,12 +182,13 @@ def _get_base_opts(strategy: Optional[dict] = None) -> dict:
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/128.0.0.0 Safari/537.36"
             ),
-            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
         },
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "web", "tv"],
                 "player_skip": ["configs", "webpage"],
+                "lang": ["tr"],
             }
         },
     }
@@ -243,60 +244,74 @@ async def search_youtube(query: str) -> Optional[dict]:
         return cached
 
     is_direct_url = query.startswith(("http://", "https://"))
-    target = query if is_direct_url else f"ytsearch:1:{query}"
+    # Türkçe arama önceliği: URL değilse arama sonuna ' Türkçe' ekle
+    if is_direct_url:
+        target = query
+    else:
+        q_lower = query.lower()
+        if not any(k in q_lower for k in ["türkçe", "turkce", "turkish"]):
+            target = f"ytsearch:1:{query} Türkçe"
+        else:
+            target = f"ytsearch:1:{query}"
 
     def _sync_search() -> Optional[dict]:
         strategies = _get_auth_strategies()
         bot_challenge_detected = False
 
-        for strategy in strategies:
-            strat_label = strategy.get("label", "Auth")
-            try:
-                opts = {
-                    **_get_base_opts(strategy),
-                    "extract_flat": "in_playlist",
-                    "skip_download": True,
-                }
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    info = ydl.extract_info(target, download=False)
-                    if not info:
-                        continue
+        search_targets = [target]
+        if not is_direct_url and target != f"ytsearch:1:{query}":
+            search_targets.append(f"ytsearch:1:{query}")
 
-                    entries = []
-                    if "entries" in info and info["entries"]:
-                        entries = [e for e in info["entries"] if e and (e.get("id") or e.get("url"))]
-                    elif info.get("id") or info.get("url"):
-                        entries = [info]
-
-                    if not entries:
-                        continue
-
-                    entry = entries[0]
-                    vid = entry.get("id", "")
-                    title = entry.get("title") or query
-                    web_url = entry.get("url") or entry.get("webpage_url")
-                    if not web_url or not str(web_url).startswith("http"):
-                        web_url = f"https://www.youtube.com/watch?v={vid}"
-                    duration = entry.get("duration") or 0
-                    thumbnail = entry.get("thumbnail", "")
-
-                    return {
-                        "title": title,
-                        "url": web_url,
-                        "duration": duration,
-                        "duration_str": _format_duration(duration),
-                        "thumbnail": thumbnail,
+        for current_target in search_targets:
+            for strategy in strategies:
+                strat_label = strategy.get("label", "Auth")
+                try:
+                    opts = {
+                        **_get_base_opts(strategy),
+                        "extract_flat": "in_playlist",
+                        "skip_download": True,
                     }
-            except Exception as e:
-                err_text = str(e)
-                if _is_bot_challenge(err_text):
-                    bot_challenge_detected = True
-                    logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
-                elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
-                    logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
-                else:
-                    logger.warning(f"YouTube arama uyarısı ({strat_label}): {err_text.splitlines()[0]}")
-                continue
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(current_target, download=False)
+                        if not info:
+                            continue
+
+                        entries = []
+                        if "entries" in info and info["entries"]:
+                            entries = [e for e in info["entries"] if e and (e.get("id") or e.get("url"))]
+                        elif info.get("id") or info.get("url"):
+                            entries = [info]
+
+                        if not entries:
+                            continue
+
+                        entry = entries[0]
+                        vid = entry.get("id", "")
+                        title = entry.get("title") or query
+                        web_url = entry.get("url") or entry.get("webpage_url")
+                        if not web_url or not str(web_url).startswith("http"):
+                            web_url = f"https://www.youtube.com/watch?v={vid}"
+                        duration = entry.get("duration") or 0
+                        thumbnail = entry.get("thumbnail", "")
+
+                        return {
+                            "title": title,
+                            "url": web_url,
+                            "duration": duration,
+                            "duration_str": _format_duration(duration),
+                            "thumbnail": thumbnail,
+                        }
+                except Exception as e:
+                    err_text = str(e)
+                    if _is_bot_challenge(err_text):
+                        bot_challenge_detected = True
+                        logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                    elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
+                        logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
+                    else:
+                        logger.warning(f"YouTube arama uyarısı ({strat_label}): {err_text.splitlines()[0]}")
+                    continue
+
 
         if bot_challenge_detected:
             logger.warning("⚠️ YouTube bot doğrulaması nedeniyle arama tamamlanamadı.")
@@ -368,9 +383,16 @@ async def get_audio_url(query: str) -> Optional[str]:
         logger.debug(f"⚡ Önbellekten ses URL'si getirildi (Cache HIT): {query}")
         return cached
 
-    # 2. URL veya Arama Sorgusu Tespiti
+    # 2. URL veya Arama Sorgusu Tespiti & Türkçe Önceliklendirme
     is_direct_url = query.startswith(("http://", "https://"))
-    target = query if is_direct_url else f"ytsearch:1:{query}"
+    if is_direct_url:
+        target = query
+    else:
+        q_lower = query.lower()
+        if not any(k in q_lower for k in ["türkçe", "turkce", "turkish"]):
+            target = f"ytsearch:1:{query} Türkçe"
+        else:
+            target = f"ytsearch:1:{query}"
 
     def _sync_get_audio_url() -> Optional[str]:
         strategies = _get_auth_strategies()
@@ -383,29 +405,35 @@ async def get_audio_url(query: str) -> Optional[str]:
             "best",
         ]
 
-        for strategy in strategies:
-            strat_label = strategy.get("label", "Auth")
-            for afmt in audio_format_candidates:
-                try:
-                    current_opts = {
-                        **_get_base_opts(strategy),
-                        "format": afmt,
-                        "skip_download": True,
-                    }
-                    with yt_dlp.YoutubeDL(current_opts) as ydl:
-                        logger.debug(f"🔐 YouTube authentication deneniyor ({strat_label})...")
-                        info = ydl.extract_info(target, download=False)
-                        if not info:
-                            continue
+        search_targets = [target]
+        if not is_direct_url and target != f"ytsearch:1:{query}":
+            search_targets.append(f"ytsearch:1:{query}")
 
-                        entries = []
-                        if "entries" in info and info["entries"]:
-                            entries = [e for e in info["entries"] if e]
-                        elif info:
-                            entries = [info]
+        for current_target in search_targets:
+            for strategy in strategies:
+                strat_label = strategy.get("label", "Auth")
+                for afmt in audio_format_candidates:
+                    try:
+                        current_opts = {
+                            **_get_base_opts(strategy),
+                            "format": afmt,
+                            "skip_download": True,
+                        }
+                        with yt_dlp.YoutubeDL(current_opts) as ydl:
+                            logger.debug(f"🔐 YouTube authentication deneniyor ({strat_label})...")
+                            info = ydl.extract_info(current_target, download=False)
+                            if not info:
+                                continue
 
-                        if not entries:
-                            continue
+                            entries = []
+                            if "entries" in info and info["entries"]:
+                                entries = [e for e in info["entries"] if e]
+                            elif info:
+                                entries = [info]
+
+                            if not entries:
+                                continue
+
 
                         entry = entries[0]
                         direct_url = entry.get("url")
@@ -438,18 +466,19 @@ async def get_audio_url(query: str) -> Optional[str]:
                             logger.info("📥 Audio stream alınıyor...")
                             logger.info("✅ YouTube audio stream başarılı")
                             return chosen_url
-                except Exception as e:
-                    err_text = str(e)
-                    if _is_bot_challenge(err_text):
-                        bot_challenge_encountered = True
-                        logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
-                        break
-                    elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
-                        logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
-                        break
-                    else:
-                        logger.debug(f"get_audio_url ({strat_label}/{afmt}) uyarısı: {err_text.splitlines()[0]}")
-                        continue
+                    except Exception as e:
+                        err_text = str(e)
+                        if _is_bot_challenge(err_text):
+                            bot_challenge_encountered = True
+                            logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                            break
+                        elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
+                            logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
+                            break
+                        else:
+                            logger.debug(f"get_audio_url ({strat_label}/{afmt}) uyarısı: {err_text.splitlines()[0]}")
+                            continue
+
 
         if bot_challenge_encountered:
             logger.warning("⚠️ YouTube bot doğrulaması nedeniyle ses akışı alınamadı.")

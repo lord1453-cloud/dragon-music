@@ -276,8 +276,9 @@ async def hava_command(client: Client, message: Message):
 
 
 # ── /hayvan ──
-@Client.on_message(filters.command(["hayvan", "tatli", "pet", "kedi", "kopek"]))
+@Client.on_message(filters.command(["hayvan", "tatli", "pet"]))
 async def hayvan_command(client: Client, message: Message):
+
     """/hayvan komutu: Rastgele sevimli bir hayvan GIF'i ve adı gönderir."""
     name, gif_url = random.choice(GIFS["animals"])
     caption = f"🐾 **Günün Sevimli Dostu:** {name} ❤️\n✨ *Gününün neşeyle dolması dileğiyle!*"

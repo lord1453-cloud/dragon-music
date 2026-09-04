@@ -447,17 +447,35 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
 
 
 # ── Komut Kayıtları (Doğrudan Otomatik Bağlanma) ───────────────
-# clean_command sayesinde hem /oynat hem de /oynat@PixelMuzikBot sorunsuz çalışır
+# clean_command sayesinde hem /oynat hem de /play (@mention dahil) sorunsuz çalışır
 
-@Client.on_message(clean_command(["oynat", "play"]) & filters.group)
+@Client.on_message(clean_command(["play", "oynat"]))
 async def play_command(client: Client, message: Message):
-    """/oynat veya /play: Sesli sohbette müzik çalar (otomatik bağlanır)."""
+    """/play veya /oynat: Sesli sohbette müzik çalar (otomatik bağlanır, Türkçe arama öncelikli)."""
+    if message.chat.type.value == "private":
+        await message.reply_text(
+            "🐲 **Sesli Sohbet Uyarısı!**\n\n"
+            "Müzik çalabilmem için beni bir **gruba** eklemeli ve o grupta sesli sohbeti başlatmalısınız!\n"
+            "Grupta `/oynat <şarkı>` veya `/play <şarkı>` yazarak müziği ateşleyebilirsiniz! 🔥"
+        )
+        return
     await _process_play(client, message, is_video=False)
 
 
-@Client.on_message(clean_command(["voynat", "vplay"]) & filters.group)
+# /oynat komutu için açık alias tanımlaması
+oynat_command = play_command
+
+
+@Client.on_message(clean_command(["voynat", "vplay"]))
 async def vplay_command(client: Client, message: Message):
     """/voynat veya /vplay: Sesli sohbette 720p görüntülü yayın başlatır (otomatik bağlanır)."""
+    if message.chat.type.value == "private":
+        await message.reply_text(
+            "🐲 **Sesli Sohbet Uyarısı!**\n\n"
+            "Görüntülü yayın başlatabilmem için beni bir **gruba** eklemeli ve sesli sohbeti başlatmalısınız!"
+        )
+        return
     await _process_play(client, message, is_video=True)
+
 
 
