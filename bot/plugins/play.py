@@ -455,8 +455,9 @@ async def play_command(client: Client, message: Message):
     await _process_play(client, message, is_video=False)
 
 
-@Client.on_message(clean_command(["voynat", "vplay", "video"]) & filters.group)
+@Client.on_message(clean_command(["voynat", "vplay"]) & filters.group)
 async def vplay_command(client: Client, message: Message):
-    """/voynat, /vplay veya /video: Sesli sohbette 720p görüntülü yayın başlatır (otomatik bağlanır)."""
+    """/voynat veya /vplay: Sesli sohbette 720p görüntülü yayın başlatır (otomatik bağlanır)."""
     await _process_play(client, message, is_video=True)
+
 

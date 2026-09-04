@@ -19,12 +19,7 @@ from pyrogram.types import (
 )
 from pyrogram.enums import ParseMode
 
-from bot.plugins.activity import (
-    _load_daily_stats,
-    _load_user_names,
-    _get_group_stats,
-)
-from bot.plugins.fun import _load_slap_stats
+from utils.db import get_daily_leaderboard, get_group_stats
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +35,11 @@ GIFS = {
     "weather_rain": "https://media.giphy.com/media/t7Qb8655Z1V9K/giphy.gif",
     "star": "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif",
     "compliment": "https://media.giphy.com/media/M90mJvfWfd5mbUuULX/giphy.gif",
+    "hug": "https://media.giphy.com/media/u9BxQbM5bxvwY/giphy.gif",
+    "kiss": "https://media.giphy.com/media/G3va31oEEnIkM/giphy.gif",
+    "dance": "https://media.giphy.com/media/blSTtZehjAZ8I/giphy.gif",
+    "cry": "https://media.giphy.com/media/L95W4wv8nnb9K/giphy.gif",
+    "party": "https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif",
     "animals": [
         ("🐈 **Mırmır Kedi**", "https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif"),
         ("🐕 **Neşeli Köpecik**", "https://media.giphy.com/media/4Zo41lhzKt6iZ8xff9/giphy.gif"),
@@ -50,6 +50,7 @@ GIFS = {
         ("🦥 **Keyifli Tembel Hayvan**", "https://media.giphy.com/media/d90e0cOHb56xW604g5/giphy.gif"),
     ]
 }
+
 
 
 # ── EĞLENCELİ VERİ HAVUZLARI ─────────────────────────────────
@@ -316,6 +317,87 @@ async def saksak_command(client: Client, message: Message):
         await message.reply_text(caption)
 
 
+# ── /saril, /sarıl ──
+@Client.on_message(filters.command(["saril", "sarıl", "hug"]))
+async def saril_command(client: Client, message: Message):
+    """/sarıl komutu: Belirtilen üyeye veya gruba ejderha sıcaklığında sarılır."""
+    sender_name = message.from_user.first_name if message.from_user else "Savaşçı"
+    target = None
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target = message.reply_to_message.from_user.first_name
+    elif len(message.command) > 1:
+        target = " ".join(message.command[1:])
+
+    if target:
+        caption = f"🤗 **{sender_name}**, **{target}** adlı üyeye ejderha kanatlarıyla sımsıkı sarıldı! ❤️🔥"
+    else:
+        caption = f"🤗 **{sender_name}** tüm gruba sımsıcak sarılıyor! Sevgimiz daim olsun! ✨"
+
+    try:
+        await message.reply_animation(animation=GIFS["hug"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ── /op, /öp, /opucuk ──
+@Client.on_message(filters.command(["op", "öp", "opucuk", "öpücük", "kiss"]))
+async def op_command(client: Client, message: Message):
+    """/öp komutu: Hedef üyeye tatlı bir öpücük gönderir."""
+    sender_name = message.from_user.first_name if message.from_user else "Savaşçı"
+    target = None
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target = message.reply_to_message.from_user.first_name
+    elif len(message.command) > 1:
+        target = " ".join(message.command[1:])
+
+    if target:
+        caption = f"💋 **{sender_name}**, **{target}** yanağına sıcacık bir öpücük kondurdu! 💖"
+    else:
+        caption = f"💋 **{sender_name}** havaya bir öpücük üfledi, dileyen yakalasın! ✨"
+
+    try:
+        await message.reply_animation(animation=GIFS["kiss"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ── /dans ──
+@Client.on_message(filters.command(["dans", "oyna", "dance"]))
+async def dans_command(client: Client, message: Message):
+    """/dans komutu: Müziğin ritmiyle ejderha dansı başlatır."""
+    sender_name = message.from_user.first_name if message.from_user else "Savaşçı"
+    caption = f"💃🕺 **{sender_name}** müziğin ateşli ritmine kapılıp piste fırladı! Ejderha dansı başlasın! 🎶🔥"
+    try:
+        await message.reply_animation(animation=GIFS["dance"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ── /agla, /ağla ──
+@Client.on_message(filters.command(["agla", "ağla", "cry", "huzun"]))
+async def agla_command(client: Client, message: Message):
+    """/ağla komutu: Hüzünlü anlar için ağlama animasyonu gönderir."""
+    sender_name = message.from_user.first_name if message.from_user else "Savaşçı"
+    caption = f"🥺💧 **{sender_name}** köşeye çekilip sessizce gözyaşı döküyor... Biri ona sarılsın! 💔"
+    try:
+        await message.reply_animation(animation=GIFS["cry"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+# ── /kutla, /parti ──
+@Client.on_message(filters.command(["kutla", "parti", "celebrate", "party"]))
+async def kutla_command(client: Client, message: Message):
+    """/kutla komutu: Grup için konfetili kutlama başlatır."""
+    sender_name = message.from_user.first_name if message.from_user else "Savaşçı"
+    caption = f"🎉🥳 **KUTLAMA ZAMANI!** {sender_name} konfetileri patlattı! Ejderha sarayında şölen var! 🎊✨"
+    try:
+        await message.reply_animation(animation=GIFS["party"], caption=caption)
+    except Exception:
+        await message.reply_text(caption)
+
+
+
 # ══════════════════════════════════════════════════════════════
 # 3. SOSYAL MENÜ CALLBACK BUTON YÖNETİCİSİ
 # ══════════════════════════════════════════════════════════════
@@ -421,25 +503,25 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
             from datetime import datetime
             today_str = datetime.now().strftime("%Y-%m-%d")
             chat_title = callback.message.chat.title or "Bu Grup"
-            group_data = _get_group_stats(chat_id, today_str)
-            names = _load_user_names()
 
-            if not group_data:
+            leaders = await get_daily_leaderboard(chat_id=chat_id, limit=3)
+            gstats = await get_group_stats(chat_id)
+
+            if not leaders:
                 await callback.answer("💬 Bu grupta bugün henüz kayıtlı mesaj yok!", show_alert=True)
                 return
 
-            sorted_users = sorted(group_data.items(), key=lambda item: item[1], reverse=True)
-            total_messages = sum(group_data.values())
-            active_members = len(group_data)
+            total_messages = gstats.get("total_messages", 0)
+            active_members = gstats.get("active_users", len(leaders))
 
-            top_uid, top_count = sorted_users[0]
-            champion_name = names.get(top_uid, f"Kullanıcı_{top_uid}")
+            champion_name = leaders[0].get("name", "Ejderha")
+            top_count = leaders[0].get("message_count", 0)
 
             medals = ["🥇", "🥈", "🥉"]
             top3_lines = []
-            for idx in range(min(3, len(sorted_users))):
-                uid, count = sorted_users[idx]
-                name = names.get(uid, f"Kullanıcı_{uid}")
+            for idx, item in enumerate(leaders[:3]):
+                name = item.get("name", "Savaşçı")
+                count = item.get("message_count", 0)
                 top3_lines.append(f"{medals[idx]} **{name}** — `{count}` mesaj")
 
             out_text = (
@@ -460,19 +542,19 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
         elif data == "sosyal_mesajlar":
             from datetime import datetime
             today_str = datetime.now().strftime("%Y-%m-%d")
-            group_data = _get_group_stats(chat_id, today_str)
-            names = _load_user_names()
 
-            if not group_data:
+            leaders = await get_daily_leaderboard(chat_id=chat_id, limit=5)
+
+            if not leaders:
                 await callback.answer("💬 Bugün henüz kayıtlı mesaj yok!", show_alert=True)
                 return
 
-            sorted_users = sorted(group_data.items(), key=lambda item: item[1], reverse=True)
             medals = ["👑", "🥈", "🥉", "4️⃣", "5️⃣"]
             lines = []
-            for idx, (uid, count) in enumerate(sorted_users[:5]):
+            for idx, item in enumerate(leaders[:5]):
                 m = medals[idx] if idx < len(medals) else f"`{idx+1}.`"
-                n = names.get(uid, f"Kullanıcı_{uid}")
+                n = item.get("name", "Savaşçı")
+                count = item.get("message_count", 0)
                 tag = " 🔥[GERÇEK EJDERHA]" if idx == 0 else ""
                 lines.append(f"{m} **{n}**{tag} — `{count}` mesaj")
 
@@ -482,10 +564,11 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 + "\n".join(lines) +
                 f"\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"👑 Günün Lideri: **{names.get(sorted_users[0][0], 'Ejderha')}**"
+                f"👑 Günün Lideri: **{leaders[0].get('name', 'Ejderha')}**"
             )
             await callback.message.edit_text(out_text, reply_markup=back_kb)
             await callback.answer()
+
 
     except Exception as e:
         logger.error(f"sosyal_callback hatası: {e}")

@@ -62,35 +62,9 @@ _download_semaphore = asyncio.Semaphore(2)  # Aynı anda max 2 ağır indirme pr
 MIN_VALID_FILE_SIZE = 10_000  # 10 KB
 
 
-# ── 1. Akıllı TTL / LRU Arama Önbelleği ────────────────────────
-class _TTLCache:
-    """Thread-safe ve asenkron uyumlu TTL + LRU önbellek."""
-    def __init__(self, maxsize: int = 500, ttl_seconds: int = 3600):
-        self._maxsize = maxsize
-        self._ttl = ttl_seconds
-        self._cache: OrderedDict[str, Tuple[float, Any]] = OrderedDict()
-        self._lock = asyncio.Lock()
+# ── 1. Akıllı TTL / LRU Arama Önbelleği (Merkezi utils/cache) ─
+from utils.cache import search_cache as _search_cache, TTLCache as _TTLCache
 
-    async def get(self, key: str) -> Optional[Any]:
-        async with self._lock:
-            if key not in self._cache:
-                return None
-            timestamp, value = self._cache[key]
-            if time.time() - timestamp > self._ttl:
-                del self._cache[key]
-                return None
-            self._cache.move_to_end(key)
-            return value
-
-    async def set(self, key: str, value: Any):
-        async with self._lock:
-            if key in self._cache:
-                del self._cache[key]
-            elif len(self._cache) >= self._maxsize:
-                self._cache.popitem(last=False)  # En eskiyi sil
-            self._cache[key] = (time.time(), value)
-
-_search_cache = _TTLCache(maxsize=500, ttl_seconds=3600)  # 60 dk (3600 sn) arama önbelleği
 
 
 # ── 2. In-Flight İndirme Tekilleştirme (Request Deduplication) ─

@@ -11,4 +11,7 @@ cookies.txt
 guest_cookies.txt
 data/*.json
 data/*.db
+data/*.db-*
+data/temp/
 !data/.gitkeep
+

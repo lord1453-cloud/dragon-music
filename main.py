@@ -13,9 +13,25 @@ import signal
 import asyncio
 import logging
 import traceback
+import gc
+from typing import Optional
 from datetime import datetime
 
-from bot.config import BOT_NAME, BOT_VERSION, LOG_LEVEL, DOWNLOADS_DIR, LOG_GROUP_ID
+
+from bot.config import (
+    BOT_NAME, BOT_VERSION, LOG_LEVEL, DOWNLOADS_DIR, TEMP_DIR, LOG_GROUP_ID
+)
+from utils.db import (
+    init_db,
+    migrate_json_to_db,
+    flush_pending_data,
+    periodic_db_flush_worker,
+)
+from utils.downloader import cleanup_all_temp_files
+
+# Arka plan veritabanı periyodik yazma görevi
+_db_flush_task: Optional[asyncio.Task] = None
+
 
 # ── 1. Windows Console UTF-8 Desteği & Loglama Ayarları ─────
 if sys.platform == "win32":
@@ -108,12 +124,23 @@ async def start_services():
         logger.info(f"○ {auth_status['detail']}")
     logger.info("═" * 60)
 
-    # Eski indirme dosyalarını temizle
+    # SQLite Veritabanı Başlatma ve JSON Migrasyonu
+    logger.info("📦 SQLite Veritabanı hazırlanıyor...")
+    await init_db()
+    await migrate_json_to_db()
+
+    # Periyodik veritabanı flush görevini başlat (5 dk)
+    global _db_flush_task
+    _db_flush_task = asyncio.create_task(periodic_db_flush_worker())
+
+    # Eski indirme ve geçici dosyaları temizle
     _cleanup_downloads()
+    cleanup_all_temp_files()
 
     # 0. Otomatik YouTube Çerez / Oturum Yenileyiciyi Başlat
     from utils.cookie_manager import start_cookie_refresher, stop_cookie_refresher
     start_cookie_refresher()
+
 
     # 1. Bot İstemcisini Başlat
     try:
@@ -251,6 +278,16 @@ async def stop_services():
         except Exception as e:
             logger.warning(f"Bot kapatılırken hata: {e}")
 
+    global _db_flush_task
+    if _db_flush_task and not _db_flush_task.done():
+        _db_flush_task.cancel()
+
+    try:
+        await flush_pending_data()
+        logger.info("💾 Bellekte bekleyen veriler SQLite'a başarıyla kaydedildi.")
+    except Exception as e:
+        logger.warning(f"Kapanış DB flush uyarısı: {e}")
+
     try:
         from utils.cookie_manager import stop_cookie_refresher
         stop_cookie_refresher()
@@ -258,7 +295,10 @@ async def stop_services():
         pass
 
     _cleanup_downloads()
+    cleanup_all_temp_files()
+    gc.collect()
     logger.info("💤 Ejderha güvenle uykuya daldı.")
+
 
 
 async def main():

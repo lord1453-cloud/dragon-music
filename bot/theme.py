@@ -63,6 +63,8 @@ COMMANDS_TEXT = """
 ├──────────────────┼───────────────────────┤
 │ /play <şarkı/url>│ Müziği başlatır       │
 │ /vplay <isim/url>│ 720p HD video yayını  │
+│ /video <isim/url>│ MP4 video indirir     │
+│ /indir <şarkı>   │ MP3 ses indirir       │
 │ /pause           │ Yayını duraklatır     │
 │ /resume          │ Yayına devam eder     │
 │ /skip            │ Sıradaki parçaya geçer│
@@ -70,7 +72,6 @@ COMMANDS_TEXT = """
 │ /queue           │ Sıra listesini açar   │
 │ /shuffle         │ Sırayı karıştırır     │
 │ /clear           │ Sırayı temizler       │
-│ /indir <şarkı>   │ 320kbps MP3 indirir   │
 └──────────────────┴───────────────────────┘
 
 🥊 ─── [ EĞLENCE & SOSYAL ] ──────────
@@ -80,6 +81,7 @@ COMMANDS_TEXT = """
 │ /slap [@üye]     │ Hedefe GIF'li tokat   │
 │ /slapboard       │ Tokat liderlik tablosu│
 │ /ship [@1] [@2]  │ Aşk & uyum falı ölçer │
+│ /saril /op /dans │ Eğlenceli GIF'ler     │
 │ /sosyal          │ Sosyal eğlence menüsü │
 └──────────────────┴───────────────────────┘
 
@@ -113,6 +115,8 @@ HELP_MUSIC_TEXT = """
 ├──────────────────┼───────────────────────┤
 │ /play <şarkı/url>│ Müziği başlatır       │
 │ /vplay <isim/url>│ 720p HD video yayını  │
+│ /video <isim/url>│ 720p/480p MP4 indirir │
+│ /indir <şarkı>   │ 192kbps MP3 indirir   │
 │ /pause           │ Yayını duraklatır     │
 │ /resume          │ Yayına devam eder     │
 │ /skip            │ Sıradaki parçaya geçer│
@@ -120,9 +124,9 @@ HELP_MUSIC_TEXT = """
 │ /queue           │ Sıra listesini açar   │
 │ /shuffle         │ Sırayı karıştırır     │
 │ /clear           │ Sırayı temizler       │
-│ /indir <şarkı>   │ 320kbps MP3 indirir   │
 └──────────────────┴───────────────────────┘
 🎧 *Spotify (şarkı, albüm, playlist) ve YouTube linkleri tam desteklenir.*
+
 """
 
 HELP_FUN_TEXT = """
@@ -341,6 +345,39 @@ def msg_download_complete(title: str) -> str:
         f"{MUSIC} **{title}**\n\n"
         f"{SPARKLE} *Ejderha müziği başarıyla teslim etti!*"
     )
+
+def msg_video_downloading(title: str, quality: str = "720p") -> str:
+    """Video indirme başladığında gösterilecek mesaj."""
+    return (
+        f"{DOWNLOAD} **Ejderha Videoyu İndiriyor!** {DRAGON}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{VIDEO} **{title}**\n"
+        f"🎯 Kalite: `{quality}`\n\n"
+        f"{FIRE} *Ejderha kanatlarını açıp videoyu yakalıyor...*"
+    )
+
+def msg_video_complete(title: str, quality: str = "720p", size_mb: float = 0.0) -> str:
+    """Video indirme tamamlandığında gösterilecek mesaj."""
+    size_str = f" • Boyut: `{size_mb} MB`" if size_mb > 0 else ""
+    return (
+        f"{GEM} **Video Hazır!** {DRAGON_FACE}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{VIDEO} **{title}**\n"
+        f"🎯 Kalite: `{quality}`{size_str}\n\n"
+        f"{SPARKLE} *Ejderhanın aleviyle kaliteli olarak sunulmuştur!*"
+    )
+
+def msg_file_too_large(size_mb: float, limit_mb: int = 50) -> str:
+    """Dosya boyutu Telegram limitini aştığında gösterilecek uyarı mesajı."""
+    return (
+        f"⚠️ **Dosya Çok Büyük!** {DRAGON}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📦 Tespit Edilen Boyut: `{size_mb} MB`\n"
+        f"⛔ Telegram Bot Limiti: `{limit_mb} MB`\n\n"
+        f"{FIRE} *Telegram botları en fazla {limit_mb} MB büyüklüğünde dosya gönderebilir.*\n"
+        f"💡 *İpucu:* `/video 480p <link>` komutuyla daha düşük kalitede deneyebilirsiniz!"
+    )
+
 
 def msg_error(detail: str = "") -> str:
     """Hata mesajı."""

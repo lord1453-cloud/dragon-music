@@ -87,10 +87,23 @@ SPOTIFY_CLIENT_SECRET: Optional[str] = os.getenv("SPOTIFY_CLIENT_SECRET")
 _admins_raw = os.getenv("ADMIN_IDS") or os.getenv("ADMINS") or os.getenv("OWNER_ID") or ""
 ADMIN_IDS: list = [int(x.strip()) for x in _admins_raw.replace(";", ",").replace(" ", ",").split(",") if x.strip().lstrip("-").isdigit()]
 
-# ── Sabit Değerler ───────────────────────────────────────────
+# ── Sabit Değerler ve Dizinler ──────────────────────────────
 BOT_NAME: str = "🐲 Ejderha Müzik Botu"
-BOT_VERSION: str = "1.2.0"
+BOT_VERSION: str = "1.3.0"
 DOWNLOADS_DIR: str = os.path.join(_base_dir, "downloads")
+DATA_DIR: str = os.path.join(_base_dir, "data")
+TEMP_DIR: str = os.path.join(DATA_DIR, "temp")
+DATABASE_PATH: str = os.path.join(DATA_DIR, "database.db")
 
-# İndirme klasörünü oluştur
+# ── Optimizasyon & İndirme Ayarları ─────────────────────────
+MAX_QUEUE_SIZE: int = int(os.getenv("MAX_QUEUE_SIZE", "20"))
+CACHE_TTL: int = int(os.getenv("CACHE_TTL", "3600"))  # YouTube arama & metadata önbellek süresi (1 saat)
+MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", str(50 * 1024 * 1024)))  # 50 MB Telegram bot dosya sınırı
+MAX_PARALLEL_DOWNLOADS: int = int(os.getenv("MAX_PARALLEL_DOWNLOADS", "2"))  # Aynı anda indirilebilecek max medya sayısı
+DB_FLUSH_INTERVAL: int = int(os.getenv("DB_FLUSH_INTERVAL", "300"))  # SQLite tampon yazma aralığı (5 dakika)
+
+# Klasörleri otomatik oluştur
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(TEMP_DIR, exist_ok=True)
+

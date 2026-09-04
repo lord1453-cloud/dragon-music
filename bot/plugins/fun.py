@@ -58,53 +58,19 @@ SLAP_TEMPLATES = [
 ]
 
 
-# ── JSON İstatistik Yardımcı Fonksiyonları ────────────────────
-def _load_slap_stats() -> dict:
-    """slap_stats.json dosyasından istatistikleri güvenli şekilde okur."""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(STATS_FILE):
-        return {}
-    try:
-        with open(STATS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Tokat istatistikleri okuma hatası: {e}")
-        return {}
+from utils.db import record_slap_event, get_slap_leaderboard
 
+# ── Geriye Dönük Uyumluluk ───────────────────────────────────
+def _load_slap_stats() -> dict:
+    return {}
 
 def _save_slap_stats(stats: dict):
-    """İstatistikleri slap_stats.json dosyasına kaydeder."""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    try:
-        with open(STATS_FILE, "w", encoding="utf-8") as f:
-            json.dump(stats, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"Tokat istatistikleri yazma hatası: {e}")
+    pass
 
+async def _update_slap_stat(sender_id: int, sender_name: str, target_id: int, target_name: str):
+    """Atılan ve yenilen tokat sayılarını SQLite tamponuna işler."""
+    await record_slap_event(sender_id, sender_name, target_id, target_name)
 
-def _update_slap_stat(sender_id: int, sender_name: str, target_id: int, target_name: str):
-    """Atılan ve yenilen tokat sayılarını günceller."""
-    stats = _load_slap_stats()
-    today_str = datetime.now().strftime("%Y-%m-%d")
-
-    s_id = str(sender_id)
-    t_id = str(target_id)
-
-    # Tokat atanın istatistiğini güncelle
-    if s_id not in stats:
-        stats[s_id] = {"isim": sender_name, "attı": 0, "yedi": 0, "son_tokat": today_str}
-    stats[s_id]["attı"] = stats[s_id].get("attı", 0) + 1
-    stats[s_id]["isim"] = sender_name
-    stats[s_id]["son_tokat"] = today_str
-
-    # Tokat yiyenin istatistiğini güncelle
-    if t_id not in stats:
-        stats[t_id] = {"isim": target_name, "attı": 0, "yedi": 0, "son_tokat": today_str}
-    stats[t_id]["yedi"] = stats[t_id].get("yedi", 0) + 1
-    stats[t_id]["isim"] = target_name
-    stats[t_id]["son_tokat"] = today_str
-
-    _save_slap_stats(stats)
 
 
 async def _resolve_user(client: Client, message: Message, query: str) -> Optional[User]:
@@ -192,7 +158,7 @@ async def tokat_command(client: Client, message: Message):
 
         # İstatistikleri güncelle
         if sender_id and target_id:
-            _update_slap_stat(sender_id, sender_name, target_id, target_name)
+            await _update_slap_stat(sender_id, sender_name, target_id, target_name)
 
         # Rastgele tokat mesajı ve GIF seç
         template = random.choice(SLAP_TEMPLATES)
@@ -222,10 +188,10 @@ async def slapboard_command(client: Client, message: Message):
     """
     /slapboard veya /tokatboard komutu:
     Grupta en çok tokat atanları ve en çok tokat yiyenleri
-    data/slap_stats.json dosyasından okuyarak liderlik tablosu olarak sunar.
+    SQLite veritabanından okuyarak liderlik tablosu olarak sunar.
     """
-    stats = _load_slap_stats()
-    if not stats:
+    leaders = await get_slap_leaderboard(limit=10)
+    if not leaders:
         await message.reply_text(
             "🥊 **TOKAT LİDERLİK TABLOSU** 🥊\n\n"
             "Henüz kimse tokat atmadı! İlk tokadı sen patlat:\n"
@@ -234,42 +200,33 @@ async def slapboard_command(client: Client, message: Message):
         return
 
     # En çok tokat atanlar (Top 5)
-    top_givers = sorted(
-        stats.items(),
-        key=lambda item: item[1].get("attı", 0),
-        reverse=True
-    )[:5]
-
+    sorted_givers = sorted(leaders, key=lambda x: x.get("slaps_given", 0), reverse=True)[:5]
     # En çok tokat yiyenler (Top 5)
-    top_receivers = sorted(
-        stats.items(),
-        key=lambda item: item[1].get("yedi", 0),
-        reverse=True
-    )[:5]
+    sorted_receivers = sorted(leaders, key=lambda x: x.get("slaps_received", 0), reverse=True)[:5]
 
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
 
     # Atanlar metni
     givers_text = ""
-    for idx, (uid, data) in enumerate(top_givers):
-        count = data.get("attı", 0)
+    for idx, item in enumerate(sorted_givers):
+        count = item.get("slaps_given", 0)
         if count > 0:
-            name = data.get("isim", f"Kullanıcı_{uid}")
+            name = item.get("user_name", f"Kullanıcı_{item.get('user_id')}")
             givers_text += f"{medals[idx]} **{name}** — `{count}` tokat\n"
     if not givers_text:
         givers_text = "Henüz tokat atan yok.\n"
 
     # Yiyenler metni
     receivers_text = ""
-    for idx, (uid, data) in enumerate(top_receivers):
-        count = data.get("yedi", 0)
+    for idx, item in enumerate(sorted_receivers):
+        count = item.get("slaps_received", 0)
         if count > 0:
-            name = data.get("isim", f"Kullanıcı_{uid}")
+            name = item.get("user_name", f"Kullanıcı_{item.get('user_id')}")
             receivers_text += f"{medals[idx]} **{name}** — `{count}` tokat\n"
     if not receivers_text:
         receivers_text = "Henüz tokat yiyen yok.\n"
 
-    total_slaps = sum(d.get("attı", 0) for d in stats.values())
+    total_slaps = sum(d.get("slaps_given", 0) for d in leaders)
 
     board_text = (
         "🏆 **EJDERHA TOKAT LİDERLİK TABLOSU** 🏆\n"
@@ -284,6 +241,7 @@ async def slapboard_command(client: Client, message: Message):
     )
 
     await message.reply_text(board_text)
+
 
 
 # ══════════════════════════════════════════════════════════════

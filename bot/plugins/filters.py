@@ -18,75 +18,13 @@ from utils.decorators import clean_command
 
 logger = logging.getLogger(__name__)
 
-# ── Dosya Yolları ─────────────────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-FILTERS_FILE = os.path.join(DATA_DIR, "filters.json")
+from utils.db import (
+    get_chat_filters,
+    save_chat_filter,
+    delete_chat_filter,
+    clear_all_chat_filters,
+)
 
-
-# ── JSON Yardımcı Fonksiyonları ───────────────────────────────
-def _load_all_filters() -> dict:
-    """Tüm grupların filtrelerini data/filters.json dosyasından okur."""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(FILTERS_FILE):
-        return {}
-    try:
-        with open(FILTERS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"filters.json okuma hatası: {e}")
-        return {}
-
-
-def _save_all_filters(data: dict):
-    """Filtre veritabanını data/filters.json dosyasına kaydeder."""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    try:
-        with open(FILTERS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"filters.json yazma hatası: {e}")
-
-
-def _load_chat_filters(chat_id: int) -> Dict[str, str]:
-    """Belirtilen gruba ait filtre sözlüğünü döndürür."""
-    all_data = _load_all_filters()
-    return all_data.get(str(chat_id), {})
-
-
-def _save_chat_filter(chat_id: int, keyword: str, reply_text: str):
-    """Gruba yeni bir filtre ekler veya mevcut olanı günceller."""
-    all_data = _load_all_filters()
-    cid = str(chat_id)
-    if cid not in all_data:
-        all_data[cid] = {}
-    all_data[cid][keyword.lower().strip()] = reply_text
-    _save_all_filters(all_data)
-
-
-def _delete_chat_filter(chat_id: int, keyword: str) -> bool:
-    """Gruptan belirtilen filtreyi siler."""
-    all_data = _load_all_filters()
-    cid = str(chat_id)
-    kw = keyword.lower().strip()
-    if cid in all_data and kw in all_data[cid]:
-        del all_data[cid][kw]
-        if not all_data[cid]:
-            del all_data[cid]
-        _save_all_filters(all_data)
-        return True
-    return False
-
-
-def _clear_all_chat_filters(chat_id: int) -> bool:
-    """Gruptaki tüm filtreleri temizler."""
-    all_data = _load_all_filters()
-    cid = str(chat_id)
-    if cid in all_data:
-        del all_data[cid]
-        _save_all_filters(all_data)
-        return True
-    return False
 
 
 async def _is_admin(client: Client, message: Message) -> bool:
@@ -158,7 +96,7 @@ async def add_filter_command(client: Client, message: Message):
         await message.reply_text("❌ Tetikleyici veya cevap boş olamaz!")
         return
 
-    _save_chat_filter(message.chat.id, keyword, reply_text)
+    await save_chat_filter(message.chat.id, keyword, reply_text)
     await message.reply_text(
         f"✅ **Filtre Başarıyla Kaydedildi!**\n\n"
         f"🎯 **Tetikleyici:** `{keyword}`\n"
@@ -184,7 +122,7 @@ async def stop_filter_command(client: Client, message: Message):
         return
 
     keyword = message.command[1].lower().strip()
-    success = _delete_chat_filter(message.chat.id, keyword)
+    success = await delete_chat_filter(message.chat.id, keyword)
 
     if success:
         await message.reply_text(f"🗑️ `{keyword}` filtresi başarıyla silindi.")
@@ -205,7 +143,7 @@ async def stop_all_filters_command(client: Client, message: Message):
         await message.reply_text("❌ Bu komutu yalnızca grup yöneticileri kullanabilir!")
         return
 
-    success = _clear_all_chat_filters(message.chat.id)
+    success = await clear_all_chat_filters(message.chat.id)
     if success:
         await message.reply_text("🧹 Gruptaki tüm özel filtreler başarıyla temizlendi.")
     else:
@@ -221,7 +159,7 @@ async def list_filters_command(client: Client, message: Message):
     /filters veya /filtreler komutu:
     Grupta kayıtlı olan tüm filtreleri listeler.
     """
-    chat_filters = _load_chat_filters(message.chat.id)
+    chat_filters = await get_chat_filters(message.chat.id)
 
     if not chat_filters:
         await message.reply_text(
@@ -272,7 +210,7 @@ async def filter_trigger_handler(client: Client, message: Message):
             return
 
         chat_id = message.chat.id
-        chat_filters = _load_chat_filters(chat_id)
+        chat_filters = await get_chat_filters(chat_id)
         if not chat_filters:
             message.continue_propagation()
             return
