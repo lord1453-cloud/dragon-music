@@ -45,18 +45,18 @@ async def _safe_reply(message: Message, text: str, reply_markup=None):
             logger.error(f"Mesaj gönderme hatası: {e2}", exc_info=True)
 
 
-# ── /start ve /menu Komutları ─────────────────────────────────
-@Client.on_message(clean_command(["start", "menu"]))
+# ── /başla, /start ve /menu Komutları ─────────────────────────
+@Client.on_message(clean_command(["başla", "basla", "start", "menu"]))
 async def start_command(client: Client, message: Message):
     """
-    /start veya /menu komutu:
+    /başla veya /menu komutu:
     Ejderha temalı ana menüyü inline butonlarla birlikte gönderir.
     Hem DM hem de gruplarda çalışır (@mention destekler).
     """
     chat_type = "DM" if message.chat.type.value == "private" else "Grup"
     user_display = get_user_display_name(message)
     user_id = get_user_id(message)
-    logger.info(f"📥 /start komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_display} ({user_id})]")
+    logger.info(f"📥 /başla komutu alındı [{chat_type}: {message.chat.id}, Kullanıcı: {user_display} ({user_id})]")
 
     await _safe_reply(
         message,
@@ -65,11 +65,14 @@ async def start_command(client: Client, message: Message):
     )
 
 
-# ── /ayarlar, /ayar, /settings Komutları ──────────────────────
-@Client.on_message(clean_command(["ayarlar", "ayar", "settings"]))
+basla_command = start_command
+
+
+# ── /ayarlar, /ayar Komutları ─────────────────────────────────
+@Client.on_message(clean_command(["ayarlar", "ayar"]))
 async def settings_command(client: Client, message: Message):
     """
-    /ayarlar veya /settings komutu:
+    /ayarlar komutu:
     Bot ve ses motoru ayarlarını gösterir.
     """
     chat_type = "DM" if message.chat.type.value == "private" else "Grup"
@@ -84,16 +87,15 @@ async def settings_command(client: Client, message: Message):
     )
 
 
-# ── /yardim, /help, /komutlar (bot/plugins/help.py üzerinden yönetilir) ──
+# ── /yardım, /komutlar (bot/plugins/help.py üzerinden yönetilir) ──
 from bot.plugins.help import komutlar_command as help_command
 
 
-
-# ── /gelistirici, /developer Komutları ────────────────────────
-@Client.on_message(clean_command(["gelistirici", "developer", "dev"]))
+# ── /gelistirici, /bilgi Komutları ────────────────────────────
+@Client.on_message(clean_command(["gelistirici", "bilgi"]))
 async def dev_command(client: Client, message: Message):
     """
-    /gelistirici veya /developer komutu:
+    /gelistirici veya /bilgi komutu:
     Geliştirici bilgilerini gösterir.
     """
     await _safe_reply(

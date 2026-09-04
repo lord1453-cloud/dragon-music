@@ -19,6 +19,7 @@ from pyrogram.types import Message, User
 from pyrogram.enums import ChatType
 
 from bot.theme import msg_error
+from utils.decorators import clean_command
 
 logger = logging.getLogger(__name__)
 
@@ -102,14 +103,14 @@ async def _get_random_chat_member(client: Client, chat_id: int, exclude_ids: set
 
 
 # ══════════════════════════════════════════════════════════════
-# 1. TOKAT ATMA KOMUTU (/slap, /tokat, /samar)
+# 1. TOKAT ATMA KOMUTU (/tokat, /samar)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["slap", "tokat", "samar"]))
+@Client.on_message(clean_command(["tokat", "samar"]))
 async def tokat_command(client: Client, message: Message):
     """
-    /slap [@kullanici] veya yanıtlama ile:
+    /tokat [@kullanici] veya yanıtlama ile:
     Hedef kullanıcıyı tokatlar, 15 çalışan GIF'ten birini gönderir
-    ve JSON veritabanında tokat istatistiklerini günceller.
+    ve SQLite veritabanında tokat istatistiklerini günceller.
     """
     try:
         sender = message.from_user
@@ -127,7 +128,7 @@ async def tokat_command(client: Client, message: Message):
             target_name = target_user.first_name
             target_id = target_user.id
 
-        # 2. Komut parametresi ile hedef belirle (/slap @kullanici)
+        # 2. Komut parametresi ile hedef belirle (/tokat @kullanici)
         elif len(message.command) > 1:
             raw_target = message.command[1]
             target_user = await _resolve_user(client, message, raw_target)
@@ -176,17 +177,17 @@ async def tokat_command(client: Client, message: Message):
             await message.reply_text(caption)
 
     except Exception as e:
-        logger.error(f"/slap komutu hatası: {e}", exc_info=True)
+        logger.error(f"/tokat komutu hatası: {e}", exc_info=True)
         await message.reply_text(msg_error("Tokat atılırken beklenmeyen bir hata oluştu."))
 
 
 # ══════════════════════════════════════════════════════════════
-# 2. TOKAT LİDERLİK TABLOSU (/slapboard, /tokatboard, /tokattablosu)
+# 2. TOKAT LİDERLİK TABLOSU (/tokatlar, /tokattablosu)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["slapboard", "tokatboard", "tokattablosu", "tokatsiralama"]))
+@Client.on_message(clean_command(["tokatlar", "tokattablosu", "tokatboard", "tokatsiralama"]))
 async def slapboard_command(client: Client, message: Message):
     """
-    /slapboard veya /tokatboard komutu:
+    /tokatlar veya /tokattablosu komutu:
     Grupta en çok tokat atanları ve en çok tokat yiyenleri
     SQLite veritabanından okuyarak liderlik tablosu olarak sunar.
     """
@@ -195,7 +196,7 @@ async def slapboard_command(client: Client, message: Message):
         await message.reply_text(
             "🥊 **TOKAT LİDERLİK TABLOSU** 🥊\n\n"
             "Henüz kimse tokat atmadı! İlk tokadı sen patlat:\n"
-            "👉 `/slap` veya `/slap @kullanıcı`"
+            "👉 `/tokat` veya `/tokat @kullanıcı`"
         )
         return
 
@@ -237,7 +238,7 @@ async def slapboard_command(client: Client, message: Message):
         f"{receivers_text}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"💥 **Toplam Atılan Tokat:** `{total_slaps}`\n"
-        "✨ *Sıralamaya girmek için sen de birini tokatla: `/slap`*"
+        "✨ *Sıralamaya girmek için sen de birini tokatla: `/tokat`*"
     )
 
     await message.reply_text(board_text)
@@ -245,12 +246,12 @@ async def slapboard_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 3. SHIP / AŞK ÖLÇER KOMUTU (/ship, /cift, /ask, /love)
+# 3. SHIP / AŞK ÖLÇER KOMUTU (/aşk, /ask, /cift)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["ship", "cift", "ask", "love"]))
+@Client.on_message(clean_command(["aşk", "ask", "cift"]))
 async def ship_command(client: Client, message: Message):
     """
-    /ship [@kullanici1] [@kullanici2] veya yanıtlama ile:
+    /aşk [@kullanici1] [@kullanici2] veya yanıtlama ile:
     İki kullanıcı arasındaki aşk ve uyum yüzdesini hesaplar.
     Görsel aşk barı ve ejderha yorumu sunar.
     """

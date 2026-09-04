@@ -8,12 +8,13 @@ from pyrogram.types import Message
 
 from bot.theme import msg_queue_list, msg_queue_empty
 from utils.queue_manager import queue
+from utils.decorators import clean_command
 
 
-@Client.on_message(filters.command(["sira", "queue", "kuyruk"]) & filters.group)
+@Client.on_message(clean_command(["sıra", "sira", "kuyruk"]) & filters.group)
 async def queue_command(client: Client, message: Message):
     """
-    /sira, /queue veya /kuyruk komutu.
+    /sıra, /sira veya /kuyruk komutu.
     Kuyruktaki şarkıları numaralı liste halinde gösterir.
     Çalan parçayı vurgular.
     """

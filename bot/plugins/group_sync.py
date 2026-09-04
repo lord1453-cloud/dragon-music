@@ -18,6 +18,7 @@ from pyrogram.enums import ChatType, ChatMemberStatus, ChatMembersFilter
 
 from bot.config import BOT_VERSION
 from bot.clients import user_client
+from utils.decorators import clean_command
 
 logger = logging.getLogger(__name__)
 
@@ -288,7 +289,7 @@ async def auto_start_sync_task(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 # 1. MANUEL SENKRONİZASYON KOMUTU (/sync_groups, /panelsenkr)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["sync_groups", "panelsenkr", "grupsenkronize"]))
+@Client.on_message(clean_command(["panelsenkr", "grupsenkronize", "sync_groups"]))
 async def manual_sync_command(client: Client, message: Message):
     """
     /sync_groups veya /panelsenkr:

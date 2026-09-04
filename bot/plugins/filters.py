@@ -42,12 +42,12 @@ async def _is_admin(client: Client, message: Message) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════
-# 1. FİLTRE EKLEME KOMUTU (/filter, /filtre)
+# 1. FİLTRE EKLEME KOMUTU (/filtre)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["filter", "filtre"]) & filters.group)
+@Client.on_message(clean_command(["filtre", "filtreekle"]) & filters.group)
 async def add_filter_command(client: Client, message: Message):
     """
-    /filter <tetikleyici> <yanıt> veya bir mesaja yanıtlayarak /filter <tetikleyici>
+    /filtre <tetikleyici> <yanıt> veya bir mesaja yanıtlayarak /filtre <tetikleyici>
     Grup içinde tetikleyici kelime yazıldığında botun otomatik vereceği cevabı kaydeder.
     """
     if not await _is_admin(client, message):
@@ -56,8 +56,8 @@ async def add_filter_command(client: Client, message: Message):
 
     args = message.command[1:]
 
-    # Listeleme isteği geldiyse (/filter list)
-    if args and args[0].lower() == "list":
+    # Listeleme isteği geldiyse (/filtre liste)
+    if args and args[0].lower() in ["liste", "list"]:
         await list_filters_command(client, message)
         return
 
@@ -68,7 +68,7 @@ async def add_filter_command(client: Client, message: Message):
     if message.reply_to_message:
         if len(args) < 1:
             await message.reply_text(
-                "ℹ️ **Kullanım:** Bir mesajı yanıtlayarak `/filter <tetikleyici>` yazın."
+                "ℹ️ **Kullanım:** Bir mesajı yanıtlayarak `/filtre <tetikleyici>` yazın."
             )
             return
         keyword = args[0].lower().strip()
@@ -77,16 +77,16 @@ async def add_filter_command(client: Client, message: Message):
             await message.reply_text("❌ Yanıtlanan mesaj metin veya başlık içermelidir!")
             return
 
-    # Durum 2: Doğrudan komutla metin ekleme (/filter <kelime> <yanıt>)
+    # Durum 2: Doğrudan komutla metin ekleme (/filtre <kelime> <yanıt>)
     else:
         if len(args) < 2:
             await message.reply_text(
                 "⚙️ **FİLTRE EKLEME KULLANIMI**\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "👉 `/filter <tetikleyici> <cevap>`\n\n"
+                "👉 `/filtre <tetikleyici> <cevap>`\n\n"
                 "**Örnekler:**\n"
-                "• `/filter sa Aleyküm Selam, hoş geldin! 🐲👋`\n"
-                "• `/filter kurallar Grup kurallarımız: Saygılı olun.`"
+                "• `/filtre sa Aleyküm Selam, hoş geldin! 🐲👋`\n"
+                "• `/filtre kurallar Grup kurallarımız: Saygılı olun.`"
             )
             return
         keyword = args[0].lower().strip()
@@ -105,12 +105,12 @@ async def add_filter_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 2. FİLTRE SİLME KOMUTU (/stop, /stopfilter, /filtresil)
+# 2. FİLTRE SİLME KOMUTU (/filtresil)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["stopfilter", "stop", "filtresil", "durdurfiltre"]) & filters.group)
+@Client.on_message(clean_command(["filtresil", "durdurfiltre"]) & filters.group)
 async def stop_filter_command(client: Client, message: Message):
     """
-    /stop <tetikleyici> veya /filtresil <tetikleyici>
+    /filtresil <tetikleyici>
     Kayıtlı bir filtreyi gruptan kaldırır.
     """
     if not await _is_admin(client, message):
@@ -118,7 +118,7 @@ async def stop_filter_command(client: Client, message: Message):
         return
 
     if len(message.command) < 2:
-        await message.reply_text("ℹ️ **Kullanım:** `/stop <silinecek_tetikleyici>`\nÖrnek: `/stop sa`")
+        await message.reply_text("ℹ️ **Kullanım:** `/filtresil <silinecek_tetikleyici>`\nÖrnek: `/filtresil sa`")
         return
 
     keyword = message.command[1].lower().strip()
@@ -131,12 +131,12 @@ async def stop_filter_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 3. TÜM FİLTRELERİ SİLME KOMUTU (/stopall, /tumfiltrelerisil)
+# 3. TÜM FİLTRELERİ SİLME KOMUTU (/tümünüsil, /tumunusil)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["stopall", "tumfiltrelerisil", "clearfilters"]) & filters.group)
+@Client.on_message(clean_command(["tümünüsil", "tumunusil", "tumfiltrelerisil"]) & filters.group)
 async def stop_all_filters_command(client: Client, message: Message):
     """
-    /stopall komutu:
+    /tümünüsil komutu:
     Gruptaki tüm filtreleri tek seferde temizler.
     """
     if not await _is_admin(client, message):
@@ -151,12 +151,12 @@ async def stop_all_filters_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 4. FİLTRELERİ LİSTELEME KOMUTU (/filters, /filtreler)
+# 4. FİLTRELERİ LİSTELEME KOMUTU (/filtreler)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["filters", "filtreler"]) & filters.group)
+@Client.on_message(clean_command(["filtreler"]) & filters.group)
 async def list_filters_command(client: Client, message: Message):
     """
-    /filters veya /filtreler komutu:
+    /filtreler komutu:
     Grupta kayıtlı olan tüm filtreleri listeler.
     """
     chat_filters = await get_chat_filters(message.chat.id)
@@ -167,7 +167,7 @@ async def list_filters_command(client: Client, message: Message):
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "Bu grupta henüz eklenmiş bir filtre bulunmuyor.\n\n"
             "➕ **Filtre Eklemek İçin:**\n"
-            "`/filter <tetikleyici> <cevap>`"
+            "`/filtre <tetikleyici> <cevap>`"
         )
         return
 

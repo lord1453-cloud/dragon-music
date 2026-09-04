@@ -40,6 +40,13 @@ def get_user_id(message: Message) -> int:
     return 0
 
 
+def tr_lower(text: str) -> str:
+    """Türkçe İ/ı ve diğer büyük harfleri güvenle küçük harfe çevirir."""
+    if not text:
+        return ""
+    return text.replace("İ", "i").replace("I", "ı").lower()
+
+
 # ── Mention (@) Temizleyici & Komut Ayrıştırıcı ───────────────
 def parse_command(message: Message) -> Tuple[Optional[str], str]:
     """
@@ -54,7 +61,7 @@ def parse_command(message: Message) -> Tuple[Optional[str], str]:
     parts = raw_text.strip().split(maxsplit=1)
     raw_cmd = parts[0]
     # @ kısmını kes (örn: /voynat@PixelMuzikBot -> /voynat)
-    clean_cmd = raw_cmd.split("@")[0].lower()
+    clean_cmd = tr_lower(raw_cmd.split("@")[0])
     args = parts[1].strip() if len(parts) > 1 else ""
 
     return clean_cmd, args
@@ -63,13 +70,13 @@ def parse_command(message: Message) -> Tuple[Optional[str], str]:
 def clean_command(commands: Union[str, List[str]], prefixes: Union[str, List[str]] = ("/", "!", ".")):
     """
     Hem standart hem de @mention ile gelen komutları (/voynat@PixelMuzikBot)
-    kesin ve hatasız algılayan akıllı Pyrogram filtresi.
+    kesin ve hatasız algılayan, Türkçe karakter duyarlı akıllı Pyrogram filtresi.
     message.command listesini otomatik olarak temizlenmiş komut ve argümanlarla günceller.
     """
     if isinstance(commands, str):
-        cmd_list = [commands.lower().lstrip("/!.")]
+        cmd_list = [tr_lower(commands.lstrip("/!."))]
     else:
-        cmd_list = [c.lower().lstrip("/!.") for c in commands]
+        cmd_list = [tr_lower(c.lstrip("/!.")) for c in commands]
 
     prefix_tuple = tuple(prefixes) if isinstance(prefixes, (list, tuple)) else (prefixes,)
 
@@ -91,7 +98,7 @@ def clean_command(commands: Union[str, List[str]], prefixes: Union[str, List[str
         # Prefix'i kaldır
         cmd_body = first_token.lstrip("/!.")
         # @botusername kısmını ayır
-        cmd_name = cmd_body.split("@")[0].lower()
+        cmd_name = tr_lower(cmd_body.split("@")[0])
 
         if cmd_name in flt.cmd_list:
             # message.command özelliğini temizlenmiş haliyle oluştur/doldur

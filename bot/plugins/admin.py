@@ -51,19 +51,19 @@ async def _extract_target_user(client: Client, message: Message) -> Tuple[Option
 
 
 # ══════════════════════════════════════════════════════════════
-# 1. KULLANICIYI BANLAMA (/ban)
+# 1. KULLANICIYI BANLAMA (/yasakla)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["ban", "yasakla"]) & filters.group)
+@Client.on_message(clean_command(["yasakla", "ban"]) & filters.group)
 @admin_only("⛔ Bu komut için yetkiniz yok!")
 async def ban_command(client: Client, message: Message):
     """
-    /ban [kullanıcı / yanıt]:
+    /yasakla [kullanıcı / yanıt]:
     Yalnızca yöneticiler tarafından çalıştırılabilir.
     Hedef kullanıcıyı gruptan süresiz yasaklar.
     """
     target_id, target_name = await _extract_target_user(client, message)
     if not target_id:
-        await message.reply_text("ℹ️ **Kullanım:** Bir mesajı yanıtlayarak `/ban` yazın veya `/ban @kullanici` şeklinde belirtin.")
+        await message.reply_text("ℹ️ **Kullanım:** Bir mesajı yanıtlayarak `/yasakla` yazın veya `/yasakla @kullanici` şeklinde belirtin.")
         return
 
     # Botun kendini veya grup sahibini banlamasını engelle
@@ -90,18 +90,18 @@ async def ban_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 2. BAN KALDIRMA (/unban)
+# 2. BAN KALDIRMA (/yasakkaldır, /banaç)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["unban", "banaç", "banyasakkaldir"]) & filters.group)
+@Client.on_message(clean_command(["yasakkaldır", "yasakkaldir", "banaç", "banac", "unban"]) & filters.group)
 @admin_only("⛔ Bu komut için yetkiniz yok!")
 async def unban_command(client: Client, message: Message):
     """
-    /unban [kullanıcı / yanıt]:
+    /yasakkaldır [kullanıcı / yanıt]:
     Kullanıcının gruptaki yasaklamasını kaldırır.
     """
     target_id, target_name = await _extract_target_user(client, message)
     if not target_id:
-        await message.reply_text("ℹ️ **Kullanım:** `/unban <kullanıcı_id veya @kullanıcı>`")
+        await message.reply_text("ℹ️ **Kullanım:** `/yasakkaldır <kullanıcı_id veya @kullanıcı>`")
         return
 
     try:
@@ -113,18 +113,18 @@ async def unban_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 3. YÖNETİCİ ATAMA (/admin, /promote)
+# 3. YÖNETİCİ ATAMA (/yetkiver)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["admin", "promote", "yetkiver"]) & filters.group)
+@Client.on_message(clean_command(["yetkiver", "admin"]) & filters.group)
 @admin_only("⛔ Bu komut için yetkiniz yok!")
 async def promote_command(client: Client, message: Message):
     """
-    /admin [kullanıcı / yanıt]:
+    /yetkiver [kullanıcı / yanıt]:
     Kullanıcıya standart grup yöneticisi yetkilerini verir.
     """
     target_id, target_name = await _extract_target_user(client, message)
     if not target_id:
-        await message.reply_text("ℹ️ **Kullanım:** Bir üyeyi yanıtlayarak `/admin` yazın.")
+        await message.reply_text("ℹ️ **Kullanım:** Bir üyeyi yanıtlayarak `/yetkiver` yazın.")
         return
 
     try:
@@ -146,18 +146,18 @@ async def promote_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 4. YÖNETİCİLİK ALMA (/unadmin, /demote)
+# 4. YÖNETİCİLİK ALMA (/yetkial)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["unadmin", "demote", "yetkial"]) & filters.group)
+@Client.on_message(clean_command(["yetkial", "unadmin"]) & filters.group)
 @admin_only("⛔ Bu komut için yetkiniz yok!")
 async def demote_command(client: Client, message: Message):
     """
-    /unadmin [kullanıcı / yanıt]:
+    /yetkial [kullanıcı / yanıt]:
     Bir kullanıcının gruptaki yöneticilik yetkilerini tamamen sıfırlar.
     """
     target_id, target_name = await _extract_target_user(client, message)
     if not target_id:
-        await message.reply_text("ℹ️ **Kullanım:** Bir yöneticiyi yanıtlayarak `/unadmin` yazın.")
+        await message.reply_text("ℹ️ **Kullanım:** Bir yöneticiyi yanıtlayarak `/yetkial` yazın.")
         return
 
     try:
@@ -181,9 +181,9 @@ async def demote_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 5. KENDİNİ ATMA / AYRILMA (/kickme)
+# 5. KENDİNİ ATMA / AYRILMA (/ayrıl)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["kickme", "banaat", "ayrilgruptan"]) & filters.group)
+@Client.on_message(clean_command(["ayrıl", "ayril", "banaat", "ayrilgruptan", "kickme"]) & filters.group)
 async def kickme_command(client: Client, message: Message):
     """
     /kickme komutu:

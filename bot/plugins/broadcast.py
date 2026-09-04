@@ -23,6 +23,7 @@ from pyrogram.errors import (
     PeerIdInvalid,
     RPCError,
 )
+from utils.decorators import clean_command
 from pyrogram.enums import ChatType
 
 # bot.config'den ADMIN_IDS çekilir, BOT_TOKEN os.getenv ile güvenli alınır
@@ -65,9 +66,9 @@ async def _is_authorized(client: Client, message: Message) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════
-# TOPLU DUYURU KOMUTU (/broadcast, /duyuru, /gcast)
+# TOPLU DUYURU KOMUTU (/duyuru, /toplumesaj)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["broadcast", "duyuru", "gcast", "toplumesaj"]))
+@Client.on_message(clean_command(["duyuru", "toplumesaj", "broadcast"]))
 async def broadcast_command(client: Client, message: Message):
     """
     /broadcast <mesaj> veya bir mesaja yanıtlayarak /broadcast:

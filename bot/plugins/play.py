@@ -262,7 +262,7 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
     Kullanıcı komutu verdiğinde doğrudan sesli sohbete otomatik bağlanır ve yayını başlatır.
     Kuyruk için 20 şarkı sınırı uygular (çalan şarkı hariç).
     """
-    cmd_name = "/voynat" if is_video else "/oynat"
+    cmd_name = "/videoçal" if is_video else "/çal"
     if len(message.command) < 2:
         example = f"{cmd_name} https://open.spotify.com/track/..." if not is_video else f"{cmd_name} Tarkan Şımarık Klip"
         await message.reply_text(msg_usage(f"{cmd_name} <şarkı adı / link>", example))
@@ -447,35 +447,42 @@ async def _process_play(client: Client, message: Message, is_video: bool = False
 
 
 # ── Komut Kayıtları (Doğrudan Otomatik Bağlanma) ───────────────
-# clean_command sayesinde hem /oynat hem de /play (@mention dahil) sorunsuz çalışır
+# clean_command sayesinde hem /çal hem de /oynat (@mention dahil) sorunsuz çalışır
 
-@Client.on_message(clean_command(["play", "oynat"]))
+@Client.on_message(clean_command(["çal", "cal", "oynat"]))
 async def play_command(client: Client, message: Message):
-    """/play veya /oynat: Sesli sohbette müzik çalar (otomatik bağlanır, Türkçe arama öncelikli)."""
+    """/çal veya /oynat: Sesli sohbette müzik çalar (otomatik bağlanır, Türkçe arama öncelikli)."""
     if message.chat.type.value == "private":
         await message.reply_text(
             "🐲 **Sesli Sohbet Uyarısı!**\n\n"
             "Müzik çalabilmem için beni bir **gruba** eklemeli ve o grupta sesli sohbeti başlatmalısınız!\n"
-            "Grupta `/oynat <şarkı>` veya `/play <şarkı>` yazarak müziği ateşleyebilirsiniz! 🔥"
+            "Grupta `/çal <şarkı>` veya `/oynat <şarkı>` yazarak müziği ateşleyebilirsiniz! 🔥"
         )
         return
     await _process_play(client, message, is_video=False)
 
 
-# /oynat komutu için açık alias tanımlaması
+# /çal ve /oynat komutu için açık alias tanımlaması
+cal_command = play_command
 oynat_command = play_command
 
 
-@Client.on_message(clean_command(["voynat", "vplay"]))
+@Client.on_message(clean_command(["videoçal", "videocal", "voynat"]))
 async def vplay_command(client: Client, message: Message):
-    """/voynat veya /vplay: Sesli sohbette 720p görüntülü yayın başlatır (otomatik bağlanır)."""
+    """/videoçal veya /voynat: Sesli sohbette 720p görüntülü yayın başlatır (otomatik bağlanır)."""
     if message.chat.type.value == "private":
         await message.reply_text(
             "🐲 **Sesli Sohbet Uyarısı!**\n\n"
-            "Görüntülü yayın başlatabilmem için beni bir **gruba** eklemeli ve sesli sohbeti başlatmalısınız!"
+            "Görüntülü yayın başlatabilmem için beni bir **gruba** eklemeli ve sesli sohbeti başlatmalısınız!\n"
+            "Grupta `/videoçal <video/şarkı>` yazarak yayını başlatabilirsiniz! 🎬"
         )
         return
     await _process_play(client, message, is_video=True)
+
+
+videocal_command = vplay_command
+voynat_command = vplay_command
+
 
 
 

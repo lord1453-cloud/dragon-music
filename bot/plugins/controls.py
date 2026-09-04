@@ -96,11 +96,11 @@ async def stats_command(client: Client, message: Message):
     )
 
 
-@Client.on_message(clean_command(["duraklat", "pause", "durdur"]) & filters.group)
+@Client.on_message(clean_command(["dur", "duraklat"]) & filters.group)
 @check_voice_chat()
 async def pause_command(client: Client, message: Message):
     """
-    /duraklat, /pause veya /durdur komutu.
+    /dur veya /duraklat komutu.
     Sesli sohbetteki yayını duraklatır.
     """
     chat_id = message.chat.id
@@ -117,11 +117,11 @@ async def pause_command(client: Client, message: Message):
         await message.reply_text(msg_error(str(e)))
 
 
-@Client.on_message(clean_command(["devam", "resume", "baslat"]) & filters.group)
+@Client.on_message(clean_command(["devam", "devamet"]) & filters.group)
 @check_voice_chat()
 async def resume_command(client: Client, message: Message):
     """
-    /devam, /resume veya /baslat komutu.
+    /devam veya /devamet komutu.
     Duraklatılmış yayını kaldığı yerden devam ettirir.
     """
     chat_id = message.chat.id
@@ -138,11 +138,11 @@ async def resume_command(client: Client, message: Message):
         await message.reply_text(msg_error(str(e)))
 
 
-@Client.on_message(clean_command(["gec", "atla", "skip", "next"]) & filters.group)
+@Client.on_message(clean_command(["geç", "gec", "atla"]) & filters.group)
 @check_voice_chat()
 async def skip_command(client: Client, message: Message):
     """
-    /gec, /atla, /skip veya /next komutu.
+    /geç, /gec veya /atla komutu.
     Çalan şarkıyı/videoyu atlayıp kuyruktaki sıradakine geçer.
     """
     chat_id = message.chat.id
@@ -196,11 +196,11 @@ async def skip_command(client: Client, message: Message):
         asyncio.create_task(cleanup_old_streams())
 
 
-@Client.on_message(clean_command(["bitir", "dur", "son", "stop", "kapat", "leave", "ayril"]) & filters.group)
+@Client.on_message(clean_command(["durdur", "bitir", "son", "kapat"]) & filters.group)
 @check_voice_chat()
 async def stop_command(client: Client, message: Message):
     """
-    /bitir, /dur, /son, /stop, /kapat komutu.
+    /durdur, /bitir, /son veya /kapat komutu.
     Yayını tamamen durdurur, kuyruğu temizler ve sesli sohbetten ayrılır.
     """
     chat_id = message.chat.id
@@ -215,11 +215,11 @@ async def stop_command(client: Client, message: Message):
     asyncio.create_task(cleanup_old_streams())
 
 
-@Client.on_message(clean_command(["karistir", "shuffle"]) & filters.group)
+@Client.on_message(clean_command(["karıştır", "karistir"]) & filters.group)
 @check_voice_chat()
 async def shuffle_command(client: Client, message: Message):
     """
-    /karistir veya /shuffle komutu.
+    /karıştır veya /karistir komutu.
     Kuyruktaki sıradaki parçaları rastgele karıştırır.
     """
     chat_id = message.chat.id
@@ -235,11 +235,11 @@ async def shuffle_command(client: Client, message: Message):
             await message.reply_text(msg_not_playing())
 
 
-@Client.on_message(clean_command(["temizle", "clear", "sirasifirla"]) & filters.group)
+@Client.on_message(clean_command(["temizle", "sirasifirla"]) & filters.group)
 @check_voice_chat()
 async def clear_command(client: Client, message: Message):
     """
-    /temizle, /clear veya /sirasifirla komutu.
+    /temizle veya /sirasifirla komutu.
     Şu an çalan parçayı bozmadan bekleyen kuyruğu temizler.
     """
     chat_id = message.chat.id

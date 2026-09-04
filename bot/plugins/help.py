@@ -48,12 +48,12 @@ GENERAL_GIFS = [
 ]
 
 
-# ── 1. /komutlar, /yardim, /help Komutu ────────────────────────
+# ── 1. /yardım, /komutlar Komutu ──────────────────────────────
 
-@Client.on_message(clean_command(["komutlar", "yardim", "help", "commands"]))
+@Client.on_message(clean_command(["yardım", "yardim", "komutlar"]))
 async def komutlar_command(client: Client, message: Message):
     """
-    /komutlar, /yardim, /help:
+    /yardım veya /komutlar:
     Tüm bot komutlarını ve açıklamalarını kategorili olarak listeler.
     """
     user_id = get_user_id(message)
@@ -74,9 +74,12 @@ async def komutlar_command(client: Client, message: Message):
         )
 
 
+yardim_command = komutlar_command
+
+
 # ── 2. /kedi Komutu (Rastgele Kedi GIF'i) ──────────────────────
 
-@Client.on_message(clean_command(["kedi", "cat"]))
+@Client.on_message(clean_command(["kedi"]))
 async def kedi_command(client: Client, message: Message):
     """/kedi komutu: Rastgele sevimli bir kedi animasyonu gönderir."""
     gif_url = random.choice(CAT_GIFS)
@@ -87,9 +90,9 @@ async def kedi_command(client: Client, message: Message):
         await message.reply_text(caption)
 
 
-# ── 3. /kopek Komutu (Rastgele Köpek GIF'i) ────────────────────
+# ── 3. /köpek Komutu (Rastgele Köpek GIF'i) ────────────────────
 
-@Client.on_message(clean_command(["kopek", "köpek", "dog"]))
+@Client.on_message(clean_command(["köpek", "kopek"]))
 async def kopek_command(client: Client, message: Message):
     """/köpek veya /kopek komutu: Rastgele neşeli bir köpek animasyonu gönderir."""
     gif_url = random.choice(DOG_GIFS)

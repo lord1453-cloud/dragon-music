@@ -85,7 +85,7 @@ def _parse_audio_args(command_parts: list) -> Tuple[int, str]:
 
 # ── 1. /video Komutu (MP4 Video İndirme) ───────────────────────
 
-@Client.on_message(clean_command(["video", "v"]))
+@Client.on_message(clean_command(["video", "videoindir"]))
 async def video_download_command(client: Client, message: Message):
     """
     /video <link veya isim>
@@ -165,7 +165,7 @@ async def video_download_command(client: Client, message: Message):
 
 # ── 2. /indir Komutu (MP3 Ses İndirme) ─────────────────────────
 
-@Client.on_message(clean_command(["indir", "dl", "download"]))
+@Client.on_message(clean_command(["indir", "sesindir"]))
 async def audio_download_command(client: Client, message: Message):
     """
     /indir <şarkı adı veya link>

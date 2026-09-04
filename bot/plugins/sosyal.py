@@ -20,6 +20,7 @@ from pyrogram.types import (
 from pyrogram.enums import ParseMode
 
 from utils.db import get_daily_leaderboard, get_group_stats
+from utils.decorators import clean_command
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,7 @@ def get_sosyal_keyboard() -> InlineKeyboardMarkup:
 # ══════════════════════════════════════════════════════════════
 # 1. /sosyal KOMUTU
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["sosyal", "social", "eglence"]))
+@Client.on_message(clean_command(["sosyal", "eglence"]))
 async def sosyal_command(client: Client, message: Message):
     """/sosyal veya /eglence komutu."""
     try:
@@ -184,7 +185,7 @@ async def sosyal_command(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 
 # ── /zar ──
-@Client.on_message(filters.command(["zar", "dice"]))
+@Client.on_message(clean_command(["zar"]))
 async def zar_command(client: Client, message: Message):
     """/zar komutu: 1-6 arası rastgele zar atar."""
     num = random.randint(1, 6)
@@ -198,7 +199,7 @@ async def zar_command(client: Client, message: Message):
 
 
 # ── /sans & /şans ──
-@Client.on_message(filters.command(["sans", "şans", "sansim", "şansım"]))
+@Client.on_message(clean_command(["sans", "şans", "sansim", "şansım"]))
 async def sans_command(client: Client, message: Message):
     """/şans komutu: Rastgele şans yüzdesi hesaplar."""
     pct = random.randint(10, 100)
@@ -224,7 +225,7 @@ async def sans_command(client: Client, message: Message):
 
 
 # ── /kahve ──
-@Client.on_message(filters.command(["kahve", "kahvefali", "fal"]))
+@Client.on_message(clean_command(["kahve", "kahvefali", "fal"]))
 async def kahve_command(client: Client, message: Message):
     """/kahve komutu: Rastgele kahve falı yorumu yapar."""
     fal = random.choice(KAHVE_FALLARI)
@@ -242,7 +243,7 @@ async def kahve_command(client: Client, message: Message):
 
 
 # ── /fikra & /fıkra ──
-@Client.on_message(filters.command(["fikra", "fıkra", "komik", "espiri"]))
+@Client.on_message(clean_command(["fikra", "fıkra", "komik", "espiri"]))
 async def fikra_command(client: Client, message: Message):
     """/fıkra komutu: Rastgele komik bir fıkra anlatır."""
     fikra = random.choice(FIKRALAR)
@@ -253,7 +254,7 @@ async def fikra_command(client: Client, message: Message):
 
 
 # ── /siir & /şiir ──
-@Client.on_message(filters.command(["siir", "şiir", "dize"]))
+@Client.on_message(clean_command(["siir", "şiir", "dize"]))
 async def siir_command(client: Client, message: Message):
     """/şiir komutu: Rastgele güzel bir şiir dizesi gönderir."""
     siir = random.choice(SIIRLER)
@@ -264,7 +265,7 @@ async def siir_command(client: Client, message: Message):
 
 
 # ── /hava ──
-@Client.on_message(filters.command(["hava", "havadurumu"]))
+@Client.on_message(clean_command(["hava", "havadurumu"]))
 async def hava_command(client: Client, message: Message):
     """/hava komutu: Günlük eğlenceli hava durumu tahmini yapar."""
     hava = random.choice(HAVALAR)
@@ -276,7 +277,7 @@ async def hava_command(client: Client, message: Message):
 
 
 # ── /hayvan ──
-@Client.on_message(filters.command(["hayvan", "tatli", "pet"]))
+@Client.on_message(clean_command(["hayvan", "tatli"]))
 async def hayvan_command(client: Client, message: Message):
 
     """/hayvan komutu: Rastgele sevimli bir hayvan GIF'i ve adı gönderir."""
@@ -289,7 +290,7 @@ async def hayvan_command(client: Client, message: Message):
 
 
 # ── /yildiz & /yıldız ──
-@Client.on_message(filters.command(["yildiz", "yıldız", "burc", "burç"]))
+@Client.on_message(clean_command(["yildiz", "yıldız", "burc", "burç"]))
 async def yildiz_command(client: Client, message: Message):
     """/yıldız komutu: Rastgele yıldız & burç falı yorumu sunar."""
     yildiz = random.choice(YILDIZ_FALLARI)
@@ -306,7 +307,7 @@ async def yildiz_command(client: Client, message: Message):
 
 
 # ── /saksak, /şakşak, /iltifat ──
-@Client.on_message(filters.command(["saksak", "şakşak", "iltifat", "ovgu"]))
+@Client.on_message(clean_command(["saksak", "şakşak", "iltifat", "ovgu"]))
 async def saksak_command(client: Client, message: Message):
     """/şakşak veya /iltifat komutu: Kullanıcıya tatlı bir iltifat eder."""
     iltifat = random.choice(ILTIFATLAR)
@@ -319,7 +320,7 @@ async def saksak_command(client: Client, message: Message):
 
 
 # ── /saril, /sarıl ──
-@Client.on_message(filters.command(["saril", "sarıl", "hug"]))
+@Client.on_message(clean_command(["saril", "sarıl"]))
 async def saril_command(client: Client, message: Message):
     """/sarıl komutu: Belirtilen üyeye veya gruba ejderha sıcaklığında sarılır."""
     sender_name = message.from_user.first_name if message.from_user else "Savaşçı"
@@ -341,7 +342,7 @@ async def saril_command(client: Client, message: Message):
 
 
 # ── /op, /öp, /opucuk ──
-@Client.on_message(filters.command(["op", "öp", "opucuk", "öpücük", "kiss"]))
+@Client.on_message(clean_command(["op", "öp", "opucuk", "öpücük"]))
 async def op_command(client: Client, message: Message):
     """/öp komutu: Hedef üyeye tatlı bir öpücük gönderir."""
     sender_name = message.from_user.first_name if message.from_user else "Savaşçı"
@@ -363,7 +364,7 @@ async def op_command(client: Client, message: Message):
 
 
 # ── /dans ──
-@Client.on_message(filters.command(["dans", "oyna", "dance"]))
+@Client.on_message(clean_command(["dans", "oyna"]))
 async def dans_command(client: Client, message: Message):
     """/dans komutu: Müziğin ritmiyle ejderha dansı başlatır."""
     sender_name = message.from_user.first_name if message.from_user else "Savaşçı"
@@ -375,7 +376,7 @@ async def dans_command(client: Client, message: Message):
 
 
 # ── /agla, /ağla ──
-@Client.on_message(filters.command(["agla", "ağla", "cry", "huzun"]))
+@Client.on_message(clean_command(["agla", "ağla", "huzun"]))
 async def agla_command(client: Client, message: Message):
     """/ağla komutu: Hüzünlü anlar için ağlama animasyonu gönderir."""
     sender_name = message.from_user.first_name if message.from_user else "Savaşçı"
@@ -387,7 +388,7 @@ async def agla_command(client: Client, message: Message):
 
 
 # ── /kutla, /parti ──
-@Client.on_message(filters.command(["kutla", "parti", "celebrate", "party"]))
+@Client.on_message(clean_command(["kutla", "parti"]))
 async def kutla_command(client: Client, message: Message):
     """/kutla komutu: Grup için konfetili kutlama başlatır."""
     sender_name = message.from_user.first_name if message.from_user else "Savaşçı"

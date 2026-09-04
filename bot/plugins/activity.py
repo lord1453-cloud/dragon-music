@@ -19,6 +19,7 @@ from utils.db import (
     get_daily_leaderboard,
     get_group_stats,
 )
+from utils.decorators import clean_command
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ async def message_counter_handler(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 # 2. GÜNLÜK AKTİFLİK LİDERLİK TABLOSU (/mesajlar, /topmesaj, /aktiflik)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["mesajlar", "topmesaj", "aktiflik", "gunluk", "top"]))
+@Client.on_message(clean_command(["mesajlar", "topmesaj", "aktiflik", "gunluk"]))
 async def daily_stats_command(client: Client, message: Message):
     """
     /mesajlar veya /topmesaj komutu:
@@ -154,7 +155,7 @@ async def daily_stats_command(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 # 3. GERÇEK EJDERHA ÖZEL ÜNVAN KOMUTU (/ejderha, /gercekejderha)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["ejderha", "gercekejderha", "kral", "lider"]))
+@Client.on_message(clean_command(["ejderha", "gercekejderha", "kral", "lider"]))
 async def real_dragon_command(client: Client, message: Message):
     """
     /ejderha veya /gercekejderha komutu:
@@ -194,7 +195,7 @@ async def real_dragon_command(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 # 4. GRUP BAZLI DETAYLI ANALİZ RAPORU (/gruprapor, /rapor, /analiz)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(filters.command(["gruprapor", "rapor", "analiz", "groupreport"]))
+@Client.on_message(clean_command(["gruprapor", "rapor", "analiz"]))
 async def group_report_command(client: Client, message: Message):
     """
     /gruprapor veya /rapor komutu:

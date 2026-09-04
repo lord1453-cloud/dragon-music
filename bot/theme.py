@@ -61,28 +61,28 @@ COMMANDS_TEXT = """
 ┌──────────────────┬───────────────────────┐
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
-│ /play <şarkı/url>│ Müziği başlatır       │
-│ /vplay <isim/url>│ 720p HD video yayını  │
+│ /çal <şarkı/url> │ Şarkı çalar           │
+│ /videoçal <isim> │ Video çalar (sesli)   │
+│ /geç             │ Sıradaki şarkıya geçer│
+│ /dur             │ Şarkıyı duraklatır    │
+│ /devam           │ Şarkıyı devam ettirir │
+│ /durdur          │ Şarkıyı durdurur      │
+│ /sıra            │ Sıradaki şarkıları gör│
+│ /karıştır        │ Kuyruğu karıştırır    │
+│ /temizle         │ Kuyruğu temizler      │
 │ /video <isim/url>│ MP4 video indirir     │
 │ /indir <şarkı>   │ MP3 ses indirir       │
-│ /pause           │ Yayını duraklatır     │
-│ /resume          │ Yayına devam eder     │
-│ /skip            │ Sıradaki parçaya geçer│
-│ /stop            │ Yayını sonlandırır    │
-│ /queue           │ Sıra listesini açar   │
-│ /shuffle         │ Sırayı karıştırır     │
-│ /clear           │ Sırayı temizler       │
 └──────────────────┴───────────────────────┘
 
 🥊 ─── [ EĞLENCE & SOSYAL ] ──────────
 ┌──────────────────┬───────────────────────┐
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
-│ /slap [@üye]     │ Hedefe GIF'li tokat   │
-│ /slapboard       │ Tokat liderlik tablosu│
-│ /ship [@1] [@2]  │ Aşk & uyum falı ölçer │
-│ /saril /op /dans │ Eğlenceli GIF'ler     │
+│ /tokat [@üye]    │ Tokat atar (GIF'li)   │
+│ /tokatlar        │ Tokat liderlik tablosu│
+│ /aşk [@1] [@2]   │ Aşk uyumu ölçer       │
 │ /sosyal          │ Sosyal eğlence menüsü │
+│ /kedi /köpek     │ Sevimli animasyonlar  │
 └──────────────────┴───────────────────────┘
 
 📊 ─── [ AKTİFLİK & SIRALAMA ] ────────
@@ -90,19 +90,19 @@ COMMANDS_TEXT = """
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
 │ /mesajlar        │ Günlük mesaj kralları │
+│ /ejderha         │ Gerçek Ejderha ünvanı │
+│ /aktiflik        │ Günlük aktiflik       │
 │ /gruprapor       │ Grubun detaylı raporu │
-│ /ejderha         │ Günün Gerçek Ejderhası│
-│ /aktiflik        │ Mesaj istatistikleri  │
 └──────────────────┴───────────────────────┘
 
 ⚙️ ─── [ ÖZEL FİLTRELER ] ─────────────
 ┌──────────────────┬───────────────────────┐
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
-│ /filter <k> <c>  │ Otomatik cevap ekler  │
-│ /stop <kelime>   │ Filtreyi siler        │
-│ /filters         │ Aktif filtre listesi  │
-│ /stopall         │ Tüm filtreleri siler  │
+│ /filtre <k> <c>  │ Filtre ekler          │
+│ /filtresil <k>   │ Filtre siler          │
+│ /filtreler       │ Filtreleri listeler   │
+│ /tümünüsil       │ Tüm filtreleri siler  │
 └──────────────────┴───────────────────────┘
 
 ✨ *Aşağıdaki butonları kullanarak kategori bazında inceleyebilirsiniz.*
@@ -113,20 +113,19 @@ HELP_MUSIC_TEXT = """
 ┌──────────────────┬───────────────────────┐
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
-│ /play <şarkı/url>│ Müziği başlatır       │
-│ /vplay <isim/url>│ 720p HD video yayını  │
+│ /çal <şarkı/url> │ Şarkı çalar           │
+│ /videoçal <isim> │ Video çalar (sesli)   │
+│ /geç             │ Sıradaki şarkıya geçer│
+│ /dur             │ Şarkıyı duraklatır    │
+│ /devam           │ Şarkıyı devam ettirir │
+│ /durdur          │ Şarkıyı durdurur      │
+│ /sıra            │ Sıradaki şarkıları gör│
+│ /karıştır        │ Kuyruğu karıştırır    │
+│ /temizle         │ Kuyruğu temizler      │
 │ /video <isim/url>│ 720p/480p MP4 indirir │
 │ /indir <şarkı>   │ 192kbps MP3 indirir   │
-│ /pause           │ Yayını duraklatır     │
-│ /resume          │ Yayına devam eder     │
-│ /skip            │ Sıradaki parçaya geçer│
-│ /stop            │ Yayını sonlandırır    │
-│ /queue           │ Sıra listesini açar   │
-│ /shuffle         │ Sırayı karıştırır     │
-│ /clear           │ Sırayı temizler       │
 └──────────────────┴───────────────────────┘
 🎧 *Spotify (şarkı, albüm, playlist) ve YouTube linkleri tam desteklenir.*
-
 """
 
 HELP_FUN_TEXT = """
@@ -134,10 +133,11 @@ HELP_FUN_TEXT = """
 ┌──────────────────┬───────────────────────┐
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
-│ /slap [@üye]     │ Hedefe GIF'li tokat   │
-│ /slapboard       │ Tokat liderlik tablosu│
-│ /ship [@1] [@2]  │ Aşk & uyum falı ölçer │
+│ /tokat [@üye]    │ Tokat atar (GIF'li)   │
+│ /tokatlar        │ Tokat liderlik tablosu│
+│ /aşk [@1] [@2]   │ Aşk uyumu ölçer       │
 │ /sosyal          │ Sosyal eğlence menüsü │
+│ /sarıl /öp /dans │ Eğlenceli animasyonlar│
 └──────────────────┴───────────────────────┘
 🔥 *15 farklı hareketli GIF ile grupta eğlenceli anlar yaşayın!*
 """
@@ -148,9 +148,9 @@ HELP_ACTIVITY_TEXT = """
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
 │ /mesajlar        │ Günlük mesaj kralları │
+│ /ejderha         │ Gerçek Ejderha ünvanı │
+│ /aktiflik        │ Günlük aktiflik       │
 │ /gruprapor       │ Grubun detaylı raporu │
-│ /ejderha         │ Günün Gerçek Ejderhası│
-│ /aktiflik        │ Mesaj istatistikleri  │
 └──────────────────┴───────────────────────┘
 👑 *Günün en çok mesaj atan üyesine özel 'GERÇEK EJDERHA' ünvanı verilir!*
 """
@@ -160,10 +160,10 @@ HELP_FILTERS_TEXT = """
 ┌──────────────────┬───────────────────────┐
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
-│ /filter <k> <c>  │ Otomatik cevap ekler  │
-│ /stop <kelime>   │ Filtreyi siler        │
-│ /filters         │ Aktif filtre listesi  │
-│ /stopall         │ Tüm filtreleri siler  │
+│ /filtre <k> <c>  │ Filtre ekler          │
+│ /filtresil <k>   │ Filtre siler          │
+│ /filtreler       │ Filtreleri listeler   │
+│ /tümünüsil       │ Tüm filtreleri siler  │
 └──────────────────┴───────────────────────┘
 🛡️ *Grubunuzda belirlediğiniz kelimelere bot otomatik cevap verir.*
 """
@@ -173,12 +173,17 @@ HELP_ADMIN_TEXT = """
 ┌──────────────────┬───────────────────────┐
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
-│ /broadcast <msg> │ Tüm gruplara duyuru   │
-│ /sync_groups     │ Web panel senkronize  │
+│ /duyuru <mesaj>  │ Tüm gruplara duyuru   │
+│ /panelsenkr      │ Web panel senkronize  │
 │ /panel           │ Kontrol panelini açar │
-│ /stats           │ Sistem kaynak durumu  │
+│ /istatistik      │ Sistem kaynak durumu  │
+│ /yasakla         │ Üyeyi gruptan yasaklar│
+│ /yasakkaldır     │ Üyenin yasağını kaldır│
+│ /yetkiver        │ Yönetici yetkisi verir│
+│ /yetkial         │ Yöneticiliği geri alır│
+│ /ayrıl           │ Gruptan çıkış yapar   │
 └──────────────────┴───────────────────────┘
-🔒 *Bu komutlar yalnızca ADMIN_IDS yetkisine sahip bot sahipleri içindir.*
+🔒 *Bu komutlar yalnızca ADMIN_IDS ve grup yöneticileri içindir.*
 """
 
 DOWNLOAD_HELP_TEXT = f"""
@@ -315,7 +320,7 @@ def msg_queue_cleared() -> str:
 
 def msg_queue_empty() -> str:
     """Kuyruk boş olduğunda gösterilecek mesaj."""
-    return f"{QUEUE} **Kuyruk Boş!** {DRAGON}\n\n*Ejderhanın listesi tükenmiş! /oynat veya /voynat ile yeni parça ekleyin.* {FIRE}"
+    return f"{QUEUE} **Kuyruk Boş!** {DRAGON}\n\n*Ejderhanın listesi tükenmiş! /çal veya /videoçal ile yeni parça ekleyin.* {FIRE}"
 
 def msg_queue_list(tracks: list, current_title: str = None) -> str:
     """Kuyruk listesini gösteren mesaj."""
@@ -406,7 +411,7 @@ def msg_bot_detected() -> str:
 
 def msg_not_playing() -> str:
     """Hiçbir şey çalmıyorken gösterilecek mesaj."""
-    return f"{DRAGON} **Ejderha Sessiz!**\n\n*Şu an çalan bir şey yok. /oynat veya /voynat ile yayını başlatın!* {FIRE}"
+    return f"{DRAGON} **Ejderha Sessiz!**\n\n*Şu an çalan bir şey yok. /çal veya /videoçal ile yayını başlatın!* {FIRE}"
 
 def msg_usage(command: str, example: str) -> str:
     """Kullanım hatası mesajı."""
