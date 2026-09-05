@@ -72,7 +72,11 @@ async def menu_callback(client: Client, callback: CallbackQuery):
         elif data == "menu_download":
             await _safe_edit(callback, text=DOWNLOAD_HELP_TEXT, reply_markup=get_back_button())
         elif data == "menu_settings":
-            await _safe_edit(callback, text=SETTINGS_TEXT, reply_markup=get_back_button())
+            from utils.db import get_chat_setting
+            from bot.theme import get_settings_keyboard
+            chat_id = callback.message.chat.id
+            clean_mode = await get_chat_setting(chat_id, "clean_mode", default=False)
+            await _safe_edit(callback, text=SETTINGS_TEXT, reply_markup=get_settings_keyboard(clean_mode=clean_mode))
         elif data == "menu_sosyal":
             from bot.plugins.sosyal import SOSYAL_MENU_TEXT, get_sosyal_keyboard
             await _safe_edit(callback, text=SOSYAL_MENU_TEXT, reply_markup=get_sosyal_keyboard())
@@ -133,6 +137,9 @@ async def control_callback(client: Client, callback: CallbackQuery):
     logger.info(f"🎛️ Panel butonu tıklandı: {data} [{chat_title}: {chat_id}, Kullanıcı: {user_name}]")
 
     try:
+        from utils.db import get_chat_setting, set_chat_setting
+        clean_mode = await get_chat_setting(chat_id, "clean_mode", default=False)
+
         # ── KONTROL PANELİNİ AÇ / YENİLE ──
         if data in ["ctrl_panel", "ctrl_refresh"]:
             current_track = await queue.get_current(chat_id)
@@ -144,8 +151,31 @@ async def control_callback(client: Client, callback: CallbackQuery):
                 queue_count=len(queue_tracks),
                 is_paused=is_paused,
             )
-            await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=is_paused))
+            await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=is_paused, clean_mode=clean_mode))
             await callback.answer("🔄 Kontrol Paneli güncellendi!")
+            return
+
+        # ── TEMİZ MOD (MESAJ SİLME) DEĞİŞTİR ──
+        elif data == "ctrl_toggle_clean":
+            from utils.decorators import is_admin_user
+            if not await is_admin_user(client, callback.message):
+                await callback.answer("⛔ Bu ayarı yalnızca grup yöneticileri değiştirebilir!", show_alert=True)
+                return
+
+            new_val = not clean_mode
+            await set_chat_setting(chat_id, "clean_mode", new_val)
+
+            current_track = await queue.get_current(chat_id)
+            queue_tracks = await queue.get_queue(chat_id)
+
+            panel_text = get_panel_text(
+                chat_title=chat_title,
+                current_track=current_track,
+                queue_count=len(queue_tracks),
+                is_paused=False,
+            )
+            await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False, clean_mode=new_val))
+            await callback.answer(f"🗑️ Mesaj Silme: {'Açık ✅ (7sn sonra silinir)' if new_val else 'Kapalı ❌'}", show_alert=True)
             return
 
         # ── DURAKLAT ──
@@ -163,7 +193,7 @@ async def control_callback(client: Client, callback: CallbackQuery):
                     queue_count=len(queue_tracks),
                     is_paused=True,
                 )
-                await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=True))
+                await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=True, clean_mode=clean_mode))
                 await callback.answer("⏸️ Yayın duraklatıldı!")
             except Exception as e:
                 logger.error(f"ctrl_pause hatası: {e}")
@@ -185,7 +215,7 @@ async def control_callback(client: Client, callback: CallbackQuery):
                     queue_count=len(queue_tracks),
                     is_paused=False,
                 )
-                await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False))
+                await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False, clean_mode=clean_mode))
                 await callback.answer("▶️ Yayın devam ettiriliyor!")
             except Exception as e:
                 logger.error(f"ctrl_resume hatası: {e}")
@@ -198,50 +228,25 @@ async def control_callback(client: Client, callback: CallbackQuery):
                 await callback.answer("❌ Çalan veya sırada bekleyen parça yok!", show_alert=True)
                 return
 
-            from bot.plugins.play import make_stream
-            next_track = await queue.next(chat_id)
+            await callback.answer("⏭️ Sıradakine geçiliyor...")
+            from bot.plugins.play import _play_next
+            await _play_next(client, chat_id)
 
-            if next_track:
-                is_video = next_track.get("stream_type") == "video"
-                try:
-                    if is_video:
-                        file_path = await get_video_file_for_stream(next_track["url"])
-                    else:
-                        file_path = await get_audio_file_for_stream(next_track["url"], title=next_track.get("title"))
-
-                    if not file_path:
-                        await callback.answer("❌ Medya dosyası indirilemedi!", show_alert=True)
-                        return
-
-                    await call_client.change_stream(chat_id, make_stream(file_path, is_video=is_video))
-                    await callback.answer(f"⏭️ Sıradakine geçildi: {next_track['title'][:30]}")
-
-                    # Paneli güncelle
-                    queue_tracks = await queue.get_queue(chat_id)
-                    panel_text = get_panel_text(
-                        chat_title=chat_title,
-                        current_track=next_track,
-                        queue_count=len(queue_tracks),
-                        is_paused=False,
-                    )
-                    await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False))
-                    asyncio.create_task(cleanup_old_streams(keep_path=file_path))
-                except Exception as e:
-                    logger.error(f"ctrl_skip hatası: {e}")
-                    await callback.answer(f"Atlama hatası: {e}", show_alert=True)
-            else:
-                try:
-                    await call_client.leave_group_call(chat_id)
-                except Exception:
-                    pass
-                await queue.clear(chat_id)
-                await callback.answer("⏹️ Kuyruk bitti, sesli sohbetten ayrılındı.")
-                panel_text = get_panel_text(chat_title=chat_title, current_track=None, queue_count=0)
-                await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False))
+            current_track = await queue.get_current(chat_id)
+            queue_tracks = await queue.get_queue(chat_id)
+            panel_text = get_panel_text(
+                chat_title=chat_title,
+                current_track=current_track,
+                queue_count=len(queue_tracks),
+                is_paused=False,
+            )
+            await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False, clean_mode=clean_mode))
             return
 
         # ── YAYINI BİTİR / DURDUR ──
         elif data == "ctrl_stop":
+            from bot.plugins.play import _cancel_all_timers
+            _cancel_all_timers(chat_id)
             try:
                 await call_client.leave_group_call(chat_id)
             except Exception:
@@ -249,7 +254,7 @@ async def control_callback(client: Client, callback: CallbackQuery):
             await queue.clear(chat_id)
             await callback.answer("🛑 Yayın sonlandırıldı ve kuyruk temizlendi.", show_alert=True)
             panel_text = get_panel_text(chat_title=chat_title, current_track=None, queue_count=0)
-            await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False))
+            await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False, clean_mode=clean_mode))
             asyncio.create_task(cleanup_old_streams())
             return
 
@@ -265,7 +270,7 @@ async def control_callback(client: Client, callback: CallbackQuery):
                     current_track=current_track,
                     queue_count=len(queue_tracks),
                 )
-                await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False))
+                await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False, clean_mode=clean_mode))
             else:
                 await callback.answer("❌ Karıştırmak için sırada en az 2 parça olmalı!", show_alert=True)
             return
@@ -277,7 +282,7 @@ async def control_callback(client: Client, callback: CallbackQuery):
                 await callback.answer("🧹 Bekleyen tüm parçalar temizlendi!")
                 current_track = await queue.get_current(chat_id)
                 panel_text = get_panel_text(chat_title=chat_title, current_track=current_track, queue_count=0)
-                await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False))
+                await _safe_edit(callback, text=panel_text, reply_markup=get_panel_keyboard(is_paused=False, clean_mode=clean_mode))
             else:
                 await callback.answer("ℹ️ Sırada bekleyen parça yok.", show_alert=True)
             return

@@ -78,11 +78,15 @@ COMMANDS_TEXT = """
 ┌──────────────────┬───────────────────────┐
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
-│ /tokat [@üye]    │ Tokat atar (GIF'li)   │
-│ /tokatlar        │ Tokat liderlik tablosu│
-│ /aşk [@1] [@2]   │ Aşk uyumu ölçer       │
-│ /sosyal          │ Sosyal eğlence menüsü │
-│ /kedi /köpek     │ Sevimli animasyonlar  │
+│ /slap [@üye]     │ Tokat atar (GIF'li)   │
+│ /slapboard       │ Tokat liderlik tablosu│
+│ /ship [@1] [@2]  │ Aşk & uyum falı ölçer │
+│ /zar /sans       │ Şans zarı & şans yüzdesi│
+│ /kahve /yildiz   │ Kahve ve yıldız falı  │
+│ /fikra /siir     │ Komik fıkra & şiirler │
+│ /hayvan /saksak  │ Sevimli hayvan & iltifat│
+│ /hava            │ Eğlenceli hava tahmini│
+│ /sosyal          │ Sosyal eğlence merkezi│
 └──────────────────┴───────────────────────┘
 
 📊 ─── [ AKTİFLİK & SIRALAMA ] ────────
@@ -133,13 +137,21 @@ HELP_FUN_TEXT = """
 ┌──────────────────┬───────────────────────┐
 │ Komut            │ Açıklama              │
 ├──────────────────┼───────────────────────┤
-│ /tokat [@üye]    │ Tokat atar (GIF'li)   │
-│ /tokatlar        │ Tokat liderlik tablosu│
-│ /aşk [@1] [@2]   │ Aşk uyumu ölçer       │
-│ /sosyal          │ Sosyal eğlence menüsü │
-│ /sarıl /öp /dans │ Eğlenceli animasyonlar│
+│ /slap [@üye]     │ Tokat atar (GIF'li)   │
+│ /slapboard       │ Tokat liderlik tablosu│
+│ /ship [@1] [@2]  │ Aşk & uyum falı ölçer │
+│ /zar             │ 1-6 arası zar atar    │
+│ /sans            │ Günlük şans derecesi  │
+│ /kahve           │ Kahve falı yorumu     │
+│ /yildiz          │ Burç & yıldız falı    │
+│ /fikra           │ Komik fıkra anlatır   │
+│ /siir            │ Güzel şiirler sunar   │
+│ /hayvan          │ Sevimli hayvan GIF'i  │
+│ /saksak          │ Tatlı iltifat fısıldar│
+│ /hava            │ Günlük hava durumu    │
+│ /sosyal          │ İnteraktif eğlence    │
 └──────────────────┴───────────────────────┘
-🔥 *15 farklı hareketli GIF ile grupta eğlenceli anlar yaşayın!*
+🔥 *Hareketli GIF'ler ve interaktif butonlarla grubunuza neşe katın!*
 """
 
 HELP_ACTIVITY_TEXT = """
@@ -181,6 +193,8 @@ HELP_ADMIN_TEXT = """
 │ /yasakkaldır     │ Üyenin yasağını kaldır│
 │ /yetkiver        │ Yönetici yetkisi verir│
 │ /yetkial         │ Yöneticiliği geri alır│
+│ /temizmod        │ Şarkı mesajlarını sil │
+│ /ayarlar         │ Grup ayarları menüsü  │
 │ /ayrıl           │ Gruptan çıkış yapar   │
 └──────────────────┴───────────────────────┘
 🔒 *Bu komutlar yalnızca ADMIN_IDS ve grup yöneticileri içindir.*
@@ -413,6 +427,37 @@ def msg_not_playing() -> str:
     """Hiçbir şey çalmıyorken gösterilecek mesaj."""
     return f"{DRAGON} **Ejderha Sessiz!**\n\n*Şu an çalan bir şey yok. /çal veya /videoçal ile yayını başlatın!* {FIRE}"
 
+def msg_auto_left_empty() -> str:
+    """Sesli sohbette dinleyici kalmadığında gösterilecek mesaj."""
+    return (
+        f"💤 **Sesli Sohbette Kimse Kalmadı** {DRAGON}\n\n"
+        f"Dinleyici kalmadığı için müzik yayını otomatik olarak kapatıldı.\n"
+        f"Müziği yeniden başlatmak için `/çal <şarkı>` yazabilirsiniz! {FIRE}"
+    )
+
+def msg_auto_left_idle() -> str:
+    """Kuyruk bittiğinde ve yayın boşta kaldığında gösterilecek mesaj."""
+    return (
+        f"✨ **Kuyruk Tamamlandı** {DRAGON}\n\n"
+        f"Çalınacak başka şarkı kalmadığı ve yayın boşta kaldığı için sesli sohbetten ayrıldım.\n"
+        f"Tekrar çalmak için `/çal <şarkı>` yazabilirsiniz! {FIRE}"
+    )
+
+def msg_auto_left_closed() -> str:
+    """Sesli sohbet yönetici tarafından kapatıldığında gösterilecek mesaj."""
+    return (
+        f"🛑 **Sesli Sohbet Kapatıldı** {DRAGON}\n\n"
+        f"Grup sesli sohbeti sonlandırıldığı için müzik yayını durduruldu ve kuyruk temizlendi."
+    )
+
+def msg_clean_mode_status(enabled: bool) -> str:
+    """Temiz mod durumu bildirimi."""
+    status = "Aktif Edildi ✅ (Arama ve sıraya ekleme mesajları 7 saniye sonra silinecek)" if enabled else "Kapatıldı ❌ (Mesajlar sohbette kalacak)"
+    return (
+        f"🗑️ **Temiz Mod (Mesaj Silme):** {status}\n\n"
+        f"💡 *Ayarı değiştirmek için `/temizmod` yazabilir veya paneldeki butona tıklayabilirsiniz.*"
+    )
+
 def msg_usage(command: str, example: str) -> str:
     """Kullanım hatası mesajı."""
     return (
@@ -460,12 +505,17 @@ def get_player_keyboard(is_paused: bool = False) -> InlineKeyboardMarkup:
         ],
     ])
 
-def get_panel_keyboard(is_paused: bool = False) -> InlineKeyboardMarkup:
+def get_panel_keyboard(is_paused: bool = False, clean_mode: bool = False) -> InlineKeyboardMarkup:
     """Detaylı interaktif Kontrol Paneli butonları."""
     play_pause_btn = (
         InlineKeyboardButton("▶️ Oynat / Devam", callback_data="ctrl_resume")
         if is_paused else
         InlineKeyboardButton("⏸️ Duraklat", callback_data="ctrl_pause")
+    )
+    clean_btn = (
+        InlineKeyboardButton("🗑️ Mesaj Silme: Açık ✅", callback_data="ctrl_toggle_clean")
+        if clean_mode else
+        InlineKeyboardButton("🗑️ Mesaj Silme: Kapalı ❌", callback_data="ctrl_toggle_clean")
     )
     return InlineKeyboardMarkup([
         [
@@ -478,15 +528,30 @@ def get_panel_keyboard(is_paused: bool = False) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("📋 Kuyruk Listesi", callback_data="ctrl_queue"),
-            InlineKeyboardButton("📊 Sistem Durumu", callback_data="ctrl_stats"),
+            clean_btn,
         ],
         [
-            InlineKeyboardButton("🛑 Yayını Sonlandır", callback_data="ctrl_stop"),
+            InlineKeyboardButton("📊 Sistem Durumu", callback_data="ctrl_stats"),
             InlineKeyboardButton("🔄 Paneli Yenile", callback_data="ctrl_refresh"),
         ],
         [
-            InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
+            InlineKeyboardButton("🛑 Yayını Sonlandır", callback_data="ctrl_stop"),
             InlineKeyboardButton("❌ Kapat", callback_data="ctrl_close"),
+        ],
+    ])
+
+def get_settings_keyboard(clean_mode: bool = False) -> InlineKeyboardMarkup:
+    """Grup ayarları butonları."""
+    clean_btn = (
+        InlineKeyboardButton("🗑️ Şarkı Mesajlarını Sil: Açık ✅", callback_data="ctrl_toggle_clean")
+        if clean_mode else
+        InlineKeyboardButton("🗑️ Şarkı Mesajlarını Sil: Kapalı ❌", callback_data="ctrl_toggle_clean")
+    )
+    return InlineKeyboardMarkup([
+        [clean_btn],
+        [
+            InlineKeyboardButton("🎛️ Kontrol Paneli", callback_data="ctrl_panel"),
+            InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_main"),
         ],
     ])
 

@@ -79,6 +79,7 @@ from utils.cookie_manager import (
     is_user_cookie_valid,
     get_browser_cookie_config,
     get_youtube_auth_status,
+    get_cookie_file_path,
     GUEST_COOKIES_FILE,
 )
 
@@ -110,27 +111,38 @@ def _classify_error(err_str: str) -> Exception:
 def _get_auth_strategies() -> list:
     """
     YouTube işlemleri için öncelik sırasına göre kimlik doğrulama stratejilerini üretir:
-    1. YOUTUBE_COOKIE_FILE (veya COOKIES_FILE) varsa ve geçerliyse
-    2. YOUTUBE_COOKIES_FROM_BROWSER yapılandırılmışsa (chrome, edge, firefox vb.)
-    3. Standart / Çerezsiz deneme
+    1. get_cookie_file_path() ile bulunan cookies.txt (veya /app/cookies.txt)
+    2. GUEST_COOKIES_FILE varsa ve geçerliyse
+    3. YOUTUBE_COOKIES_FROM_BROWSER yapılandırılmışsa (chrome, edge, firefox vb.)
+    4. Standart / Çerezsiz deneme
     """
     strategies = []
 
     # 1. Öncelik: Cookie File
-    cookie_path = YOUTUBE_COOKIE_FILE or COOKIES_FILE
-    if cookie_path:
-        if os.path.exists(cookie_path):
-            is_valid, reason = validate_cookie_file(cookie_path)
-            if is_valid:
-                strategies.append({
-                    "type": "cookiefile",
-                    "cookiefile": cookie_path,
-                    "label": f"Cookie File ({os.path.basename(cookie_path)})",
-                })
-            else:
-                logger.warning(f"⚠️ YouTube cookie authentication başarısız: {reason}")
+    cookie_path = get_cookie_file_path(warn_if_missing=True)
+    if cookie_path and os.path.exists(cookie_path):
+        is_valid, reason = validate_cookie_file(cookie_path)
+        if is_valid:
+            strategies.append({
+                "type": "cookiefile",
+                "cookiefile": cookie_path,
+                "label": f"Cookie File ({os.path.basename(cookie_path)})",
+            })
         else:
-            logger.warning(f"⚠️ YouTube cookie dosyası bulunamadı: {cookie_path}")
+            logger.warning(f"⚠️ YouTube cookie doğrulaması uyarısı: {reason}, yine de deneniyor...")
+            strategies.append({
+                "type": "cookiefile",
+                "cookiefile": cookie_path,
+                "label": f"Cookie File ({os.path.basename(cookie_path)})",
+            })
+
+    # Misafir çerezi varsa ve kullanıcı çerezi yoksa
+    if not strategies and os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 10:
+        strategies.append({
+            "type": "cookiefile",
+            "cookiefile": GUEST_COOKIES_FILE,
+            "label": "Guest Cookie File",
+        })
 
     # 2. Öncelik: Tarayıcı Çerezleri (cookiesfrombrowser)
     browser = get_browser_cookie_config()
@@ -153,7 +165,7 @@ def _get_auth_strategies() -> list:
 
 def check_cookies_status(cookie_path: Optional[str] = None) -> bool:
     """Kullanıcının sağladığı cookies.txt dosyasının geçerliliğini kontrol eder."""
-    return is_user_cookie_valid(cookie_path or YOUTUBE_COOKIE_FILE or COOKIES_FILE)
+    return is_user_cookie_valid(cookie_path or get_cookie_file_path())
 
 
 # ── 4. Temel yt-dlp Yapılandırması ─────────────────────────────
@@ -188,6 +200,7 @@ def _get_base_opts(strategy: Optional[dict] = None) -> dict:
             "youtube": {
                 "player_client": ["android", "web", "tv"],
                 "player_skip": ["configs", "webpage"],
+                "skip": ["dash", "hls"],
                 "lang": ["tr"],
             }
         },
@@ -198,6 +211,10 @@ def _get_base_opts(strategy: Optional[dict] = None) -> dict:
             opts["cookiefile"] = strategy["cookiefile"]
         elif strategy.get("type") == "browser" and strategy.get("cookiesfrombrowser"):
             opts["cookiesfrombrowser"] = strategy["cookiesfrombrowser"]
+    else:
+        cfile = get_cookie_file_path(warn_if_missing=False)
+        if cfile:
+            opts["cookiefile"] = cfile
 
     return opts
 

@@ -17,7 +17,7 @@ import sqlite3
 import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 from concurrent.futures import ThreadPoolExecutor
 
 from bot.config import DATABASE_PATH, DATA_DIR, DB_FLUSH_INTERVAL
@@ -93,6 +93,16 @@ def _sync_init_db():
                 slaps_given INTEGER NOT NULL DEFAULT 0,
                 slaps_received INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT NOT NULL
+            )
+        """)
+
+        # 5. Grup Ayarları (Temiz mod, otomatik silme vb.)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chat_settings (
+                chat_id TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (chat_id, key)
             )
         """)
 
@@ -506,3 +516,63 @@ async def get_slap_leaderboard(limit: int = 10) -> List[Dict[str, Any]]:
     await flush_pending_data()
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_db_executor, _sync_get_slap_leaderboard, limit)
+
+
+# ── Grup Ayarları (Temiz Mod, Otomatik Mesaj Silme vb.) ───────
+
+_chat_settings_cache: Dict[Tuple[str, str], Any] = {}
+
+
+def _sync_get_chat_setting(chat_id: str, key: str, default: Any = None) -> Any:
+    with _get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM chat_settings WHERE chat_id = ? AND key = ?", (chat_id, key))
+        row = cursor.fetchone()
+        if not row:
+            return default
+        raw_val = row["value"]
+        try:
+            return json.loads(raw_val)
+        except Exception:
+            return raw_val
+
+
+def _sync_set_chat_setting(chat_id: str, key: str, value: Any):
+    val_str = json.dumps(value) if not isinstance(value, str) else value
+    with _get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO chat_settings (chat_id, key, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id, key) DO UPDATE SET value = excluded.value
+        """, (chat_id, key, val_str))
+        conn.commit()
+
+
+async def get_chat_setting(chat_id: Union[int, str], key: str, default: Any = None) -> Any:
+    """
+    Grup ayarını getirir.
+    Hızlı erişim için bellek içi tamponu kullanır.
+    """
+    cid_str = str(chat_id)
+    cache_key = (cid_str, key)
+    if cache_key in _chat_settings_cache:
+        return _chat_settings_cache[cache_key]
+
+    loop = asyncio.get_running_loop()
+    val = await loop.run_in_executor(_db_executor, _sync_get_chat_setting, cid_str, key, default)
+    _chat_settings_cache[cache_key] = val
+    return val
+
+
+async def set_chat_setting(chat_id: Union[int, str], key: str, value: Any):
+    """
+    Grup ayarını SQLite'a kaydeder ve bellek önbelleğini günceller.
+    """
+    cid_str = str(chat_id)
+    cache_key = (cid_str, key)
+    _chat_settings_cache[cache_key] = value
+
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(_db_executor, _sync_set_chat_setting, cid_str, key, value)
+

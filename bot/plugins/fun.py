@@ -29,14 +29,14 @@ STATS_FILE = os.path.join(DATA_DIR, "slap_stats.json")
 
 # ── Çalışan 15 Adet Sabit Tokat GIF Listesi ───────────────────
 SLAP_GIFS = [
-    "https://media.giphy.com/media/Gf3AUz3eBNbTW/giphy.gif",
-    "https://media.giphy.com/media/jLeyZWgtwWP2U/giphy.gif",
-    "https://media.giphy.com/media/alsfZ4y5i53g4qI0mK/giphy.gif",
-    "https://media.giphy.com/media/Zau0yrl15oqdK2lT40/giphy.gif",
-    "https://media.giphy.com/media/m6etwfPQ3U0vK/giphy.gif",
+    "https://media.giphy.com/media/gSIz6gGLhguOY/giphy.gif",
+    "https://media.giphy.com/media/xUO4t2gkWBxDi/giphy.gif",
+    "https://media.giphy.com/media/3XlEk2RxPS1m8/giphy.gif",
+    "https://media.giphy.com/media/uqSU9IEYEKAbS/giphy.gif",
+    "https://media.giphy.com/media/lX03hULhgCYQ8/giphy.gif",
+    "https://media.giphy.com/media/vxvNnKRug7SCs/giphy.gif",
     "https://media.giphy.com/media/u8mAhlVOkaac8/giphy.gif",
     "https://media.giphy.com/media/tXMPB9cHxUE7NbadYQ/giphy.gif",
-    "https://media.giphy.com/media/k1uEYPE77QuEA/giphy.gif",
     "https://media1.tenor.com/m/Ws6Dm1ZW_vMAAAAC/girl-slap.gif",
     "https://media1.tenor.com/m/CvBTA0GyrogAAAAC/anime-slap.gif",
     "https://media1.tenor.com/m/iDdSBScLKGMAAAAC/slap-handa-seishuu.gif",
@@ -103,9 +103,9 @@ async def _get_random_chat_member(client: Client, chat_id: int, exclude_ids: set
 
 
 # ══════════════════════════════════════════════════════════════
-# 1. TOKAT ATMA KOMUTU (/tokat, /samar)
+# 1. TOKAT ATMA KOMUTU (/tokat, /slap, /samar)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["tokat", "samar"]))
+@Client.on_message(clean_command(["tokat", "slap", "samar", "şamar", "osmanlitokadi", "osmanlıtokadı"]))
 async def tokat_command(client: Client, message: Message):
     """
     /tokat [@kullanici] veya yanıtlama ile:
@@ -182,12 +182,12 @@ async def tokat_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 2. TOKAT LİDERLİK TABLOSU (/tokatlar, /tokattablosu)
+# 2. TOKAT LİDERLİK TABLOSU (/slapboard, /tokatlar, /tokattablosu)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["tokatlar", "tokattablosu", "tokatboard", "tokatsiralama"]))
+@Client.on_message(clean_command(["slapboard", "tokatboard", "tokatlar", "tokattablosu", "tokatsiralama", "tokatkrallari", "tokatlistesi"]))
 async def slapboard_command(client: Client, message: Message):
     """
-    /tokatlar veya /tokattablosu komutu:
+    /slapboard, /tokatlar veya /tokattablosu komutu:
     Grupta en çok tokat atanları ve en çok tokat yiyenleri
     SQLite veritabanından okuyarak liderlik tablosu olarak sunar.
     """
@@ -196,7 +196,7 @@ async def slapboard_command(client: Client, message: Message):
         await message.reply_text(
             "🥊 **TOKAT LİDERLİK TABLOSU** 🥊\n\n"
             "Henüz kimse tokat atmadı! İlk tokadı sen patlat:\n"
-            "👉 `/tokat` veya `/tokat @kullanıcı`"
+            "👉 `/slap` veya `/slap @kullanıcı`"
         )
         return
 
@@ -238,7 +238,7 @@ async def slapboard_command(client: Client, message: Message):
         f"{receivers_text}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"💥 **Toplam Atılan Tokat:** `{total_slaps}`\n"
-        "✨ *Sıralamaya girmek için sen de birini tokatla: `/tokat`*"
+        "✨ *Sıralamaya girmek için sen de birini tokatla: `/slap`*"
     )
 
     await message.reply_text(board_text)
@@ -246,9 +246,9 @@ async def slapboard_command(client: Client, message: Message):
 
 
 # ══════════════════════════════════════════════════════════════
-# 3. SHIP / AŞK ÖLÇER KOMUTU (/aşk, /ask, /cift)
+# 3. SHIP / AŞK ÖLÇER KOMUTU (/ship, /aşk, /ask, /cift)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["aşk", "ask", "cift"]))
+@Client.on_message(clean_command(["ship", "aşk", "ask", "cift", "çift", "uyum"]))
 async def ship_command(client: Client, message: Message):
     """
     /aşk [@kullanici1] [@kullanici2] veya yanıtlama ile:

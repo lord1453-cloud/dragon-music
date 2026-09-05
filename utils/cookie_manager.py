@@ -26,6 +26,55 @@ SUPPORTED_BROWSERS = {
 
 _refresher_task: Optional[asyncio.Task] = None
 _cookie_lock = asyncio.Lock()
+_missing_cookie_warned = False
+
+
+def get_cookie_file_path(warn_if_missing: bool = False) -> Optional[str]:
+    """
+    YouTube çerez dosyasının (cookies.txt) yolunu tespit eder.
+    Öncelik sırası:
+    1. YOUTUBE_COOKIE_FILE veya COOKIES_FILE ortam değişkenleri / config
+    2. /app/cookies.txt (Docker ortamı)
+    3. Proje ana dizinindeki cookies.txt
+    4. Çalışma dizinindeki (CWD) cookies.txt
+
+    Dosya bulunamazsa uyarı loglar ve None döner (hata fırlatmaz, bot çalışmaya devam eder).
+    """
+    global _missing_cookie_warned
+    candidates = []
+
+    # Ortam değişkenleri ve config
+    for env_var in ["YOUTUBE_COOKIE_FILE", "COOKIES_FILE_PATH", "COOKIE_FILE", "YOUTUBE_COOKIE_PATH"]:
+        val = os.getenv(env_var)
+        if val and val.strip():
+            clean_val = val.strip().strip("'\"")
+            candidates.extend([clean_val, os.path.join(_BASE_DIR, clean_val)])
+
+    if YOUTUBE_COOKIE_FILE:
+        candidates.append(YOUTUBE_COOKIE_FILE)
+    if COOKIES_FILE:
+        candidates.append(COOKIES_FILE)
+
+    # Standart lokasyonlar
+    candidates.extend([
+        "/app/cookies.txt",
+        os.path.join(_BASE_DIR, "cookies.txt"),
+        os.path.abspath("cookies.txt"),
+        "cookies.txt",
+    ])
+
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate) and os.path.isfile(candidate) and os.path.getsize(candidate) > 10:
+            return os.path.abspath(candidate)
+
+    if warn_if_missing and not _missing_cookie_warned:
+        logger.warning(
+            "⚠️ YouTube çerez dosyası (/app/cookies.txt veya cookies.txt) bulunamadı! "
+            "Bot doğrulaması (Sign in to confirm you're not a bot) nedeniyle bazı videolar çalışmayabilir."
+        )
+        _missing_cookie_warned = True
+
+    return None
 
 
 def validate_cookie_file(cookie_path: Optional[str] = None) -> Tuple[bool, str]:
@@ -34,9 +83,9 @@ def validate_cookie_file(cookie_path: Optional[str] = None) -> Tuple[bool, str]:
     Çerez içeriğini ASLA loglamaz veya dışarı sızdırmaz.
     (is_valid, reason) döner.
     """
-    path = cookie_path or YOUTUBE_COOKIE_FILE or COOKIES_FILE
+    path = cookie_path or get_cookie_file_path()
     if not path:
-        return False, "Çerez dosyası belirtilmemiş."
+        return False, "Çerez dosyası belirtilmemiş veya bulunamadı."
     if not os.path.exists(path):
         return False, f"Çerez dosyası bulunamadı: {os.path.basename(path)}"
     if not os.path.isfile(path):
@@ -108,7 +157,7 @@ def get_youtube_auth_status() -> Dict[str, Any]:
     Kesinlikle hassas çerez verisi içermez.
     """
     # 1. Öncelik: Cookie File
-    target_file = YOUTUBE_COOKIE_FILE or COOKIES_FILE
+    target_file = get_cookie_file_path()
     if target_file and os.path.exists(target_file):
         is_valid, reason = validate_cookie_file(target_file)
         if is_valid:
@@ -200,7 +249,7 @@ async def get_effective_cookiefile() -> Optional[str]:
     - Kullanıcının cookies.txt'si geçerliyse onu kullanır.
     - Geçersizse veya yoksa otomatik üretilen guest_cookies.txt'yi devreye sokar.
     """
-    active_user_cookie = YOUTUBE_COOKIE_FILE or COOKIES_FILE
+    active_user_cookie = get_cookie_file_path()
     if is_user_cookie_valid(active_user_cookie):
         return active_user_cookie
 
@@ -227,7 +276,7 @@ async def _refresher_loop():
         try:
             # 6 saat bekle
             await asyncio.sleep(21600)
-            active_cookie = YOUTUBE_COOKIE_FILE or COOKIES_FILE
+            active_cookie = get_cookie_file_path()
             if not is_user_cookie_valid(active_cookie):
                 await refresh_visitor_cookies(GUEST_COOKIES_FILE)
         except asyncio.CancelledError:

@@ -54,16 +54,19 @@ if _cookies_data_env and _cookies_data_env.strip():
         pass
 
 # 2. Netscape cookie dosyası yolu tespiti
-YOUTUBE_COOKIE_FILE_PATH: Optional[str] = os.getenv("YOUTUBE_COOKIE_FILE") or os.getenv("COOKIES_FILE_PATH")
+YOUTUBE_COOKIE_FILE_PATH: Optional[str] = (
+    os.getenv("YOUTUBE_COOKIE_FILE") or os.getenv("COOKIES_FILE_PATH") or os.getenv("COOKIE_FILE")
+)
 _possible_cookie_paths = []
 if YOUTUBE_COOKIE_FILE_PATH and YOUTUBE_COOKIE_FILE_PATH.strip():
     raw_path = YOUTUBE_COOKIE_FILE_PATH.strip().strip("'\"")
     _possible_cookie_paths.extend([raw_path, os.path.join(_base_dir, raw_path)])
-# Standart default arama yolları
+# Standart default arama yolları (/app/cookies.txt, cookies.txt vb.)
 _possible_cookie_paths.extend([
+    "/app/cookies.txt",
     os.path.join(_base_dir, "cookies.txt"),
     "cookies.txt",
-    "/app/cookies.txt",
+    os.path.abspath("cookies.txt"),
 ])
 
 YOUTUBE_COOKIE_FILE: Optional[str] = None

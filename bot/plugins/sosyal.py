@@ -7,7 +7,9 @@
 
 import os
 import random
+import hashlib
 import logging
+from datetime import datetime
 from typing import Optional
 
 from pyrogram import Client, filters
@@ -16,10 +18,11 @@ from pyrogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     CallbackQuery,
+    User,
 )
-from pyrogram.enums import ParseMode
+from pyrogram.enums import ParseMode, ChatType
 
-from utils.db import get_daily_leaderboard, get_group_stats
+from utils.db import get_daily_leaderboard, get_group_stats, get_slap_leaderboard, record_slap_event
 from utils.decorators import clean_command
 
 logger = logging.getLogger(__name__)
@@ -29,11 +32,11 @@ logger = logging.getLogger(__name__)
 GIFS = {
     "dice": "https://media.giphy.com/media/3oriO04qxVReM5rJEA/giphy.gif",
     "coffee": "https://media.giphy.com/media/3oriO13KTkzPwTykp2/giphy.gif",
-    "luck": "https://media.giphy.com/media/l41JGlwa1xY7Btxfs/giphy.gif",
+    "luck": "https://media.giphy.com/media/l3UcjBJUov1gCRGbS/giphy.gif",
     "joke": "https://media.giphy.com/media/10JhviFuU2gWD6/giphy.gif",
     "poetry": "https://media.giphy.com/media/26FPy3QZLnLCy5Ip2/giphy.gif",
     "weather_sun": "https://media.giphy.com/media/u01ioCe6G8URG/giphy.gif",
-    "weather_rain": "https://media.giphy.com/media/t7Qb8655Z1V9K/giphy.gif",
+    "weather_rain": "https://media.giphy.com/media/mno6BJfyRCbde/giphy.gif",
     "star": "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif",
     "compliment": "https://media.giphy.com/media/M90mJvfWfd5mbUuULX/giphy.gif",
     "hug": "https://media.giphy.com/media/u9BxQbM5bxvwY/giphy.gif",
@@ -43,7 +46,7 @@ GIFS = {
     "party": "https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif",
     "animals": [
         ("🐈 **Mırmır Kedi**", "https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif"),
-        ("🐕 **Neşeli Köpecik**", "https://media.giphy.com/media/4Zo41lhzKt6iZ8xff9/giphy.gif"),
+        ("🐕 **Neşeli Köpecik**", "https://media.giphy.com/media/bbshzgyFQDqPHXBo4c/giphy.gif"),
         ("🐼 **Tembel Panda**", "https://media.giphy.com/media/EatwJZRUIv41G/giphy.gif"),
         ("🦊 **Akıllı Tilki**", "https://media.giphy.com/media/cno2xVuF567FVoEZMQ/giphy.gif"),
         ("🦦 **Sevimli Su Samuru**", "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHY5bTFrb2x5Y3BxeDZ2OXh2czA0MDFnNTI4NmVtc3J3M2syc3FiaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKMt1VVNkHV2PaE/giphy.gif"),
@@ -130,6 +133,21 @@ Grubunuza neşe katacak interaktif eğlence ve oyun komutları:
 """
 
 
+async def _get_random_chat_member(client: Client, chat_id: int, exclude_ids: set) -> Optional[User]:
+    """Gruptan rastgele bir kullanıcı (bot olmayan) seçer."""
+    try:
+        members = []
+        async for member in client.get_chat_members(chat_id, limit=50):
+            user = member.user
+            if user and not user.is_bot and user.id not in exclude_ids:
+                members.append(user)
+        if members:
+            return random.choice(members)
+    except Exception as e:
+        logger.debug(f"Rastgele grup üyesi çekilemedi: {e}")
+    return None
+
+
 def get_sosyal_keyboard() -> InlineKeyboardMarkup:
     """Zengin emojili ve animasyonlu buton takımı."""
     return InlineKeyboardMarkup([
@@ -150,8 +168,12 @@ def get_sosyal_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("💐 Şakşak (İltifat)", callback_data="sosyal_saksak"),
         ],
         [
-            InlineKeyboardButton("🥊 Tokat At", switch_inline_query_current_chat="/slap "),
-            InlineKeyboardButton("💘 Aşk Ölçer", switch_inline_query_current_chat="/ship "),
+            InlineKeyboardButton("🥊 Tokat At", callback_data="sosyal_slap"),
+            InlineKeyboardButton("🏆 Tokat Tablosu", callback_data="sosyal_slapboard"),
+        ],
+        [
+            InlineKeyboardButton("💘 Aşk Ölçer (Ship)", callback_data="sosyal_ship"),
+            InlineKeyboardButton("🌤️ Hava Durumu", callback_data="sosyal_hava"),
         ],
         [
             InlineKeyboardButton("📊 Mesaj Kralları", callback_data="sosyal_mesajlar"),
@@ -185,7 +207,7 @@ async def sosyal_command(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 
 # ── /zar ──
-@Client.on_message(clean_command(["zar"]))
+@Client.on_message(clean_command(["zar", "dice", "zarat"]))
 async def zar_command(client: Client, message: Message):
     """/zar komutu: 1-6 arası rastgele zar atar."""
     num = random.randint(1, 6)
@@ -199,7 +221,7 @@ async def zar_command(client: Client, message: Message):
 
 
 # ── /sans & /şans ──
-@Client.on_message(clean_command(["sans", "şans", "sansim", "şansım"]))
+@Client.on_message(clean_command(["sans", "şans", "sansim", "şansım", "sansolc", "şansölç"]))
 async def sans_command(client: Client, message: Message):
     """/şans komutu: Rastgele şans yüzdesi hesaplar."""
     pct = random.randint(10, 100)
@@ -225,7 +247,7 @@ async def sans_command(client: Client, message: Message):
 
 
 # ── /kahve ──
-@Client.on_message(clean_command(["kahve", "kahvefali", "fal"]))
+@Client.on_message(clean_command(["kahve", "kahvefali", "kahvefal", "fal"]))
 async def kahve_command(client: Client, message: Message):
     """/kahve komutu: Rastgele kahve falı yorumu yapar."""
     fal = random.choice(KAHVE_FALLARI)
@@ -243,7 +265,7 @@ async def kahve_command(client: Client, message: Message):
 
 
 # ── /fikra & /fıkra ──
-@Client.on_message(clean_command(["fikra", "fıkra", "komik", "espiri"]))
+@Client.on_message(clean_command(["fikra", "fıkra", "komik", "espiri", "espri", "fıkraanlat"]))
 async def fikra_command(client: Client, message: Message):
     """/fıkra komutu: Rastgele komik bir fıkra anlatır."""
     fikra = random.choice(FIKRALAR)
@@ -254,7 +276,7 @@ async def fikra_command(client: Client, message: Message):
 
 
 # ── /siir & /şiir ──
-@Client.on_message(clean_command(["siir", "şiir", "dize"]))
+@Client.on_message(clean_command(["siir", "şiir", "dize", "siiroku", "şiiroku"]))
 async def siir_command(client: Client, message: Message):
     """/şiir komutu: Rastgele güzel bir şiir dizesi gönderir."""
     siir = random.choice(SIIRLER)
@@ -265,7 +287,7 @@ async def siir_command(client: Client, message: Message):
 
 
 # ── /hava ──
-@Client.on_message(clean_command(["hava", "havadurumu"]))
+@Client.on_message(clean_command(["hava", "havadurumu", "gundemhava"]))
 async def hava_command(client: Client, message: Message):
     """/hava komutu: Günlük eğlenceli hava durumu tahmini yapar."""
     hava = random.choice(HAVALAR)
@@ -277,7 +299,7 @@ async def hava_command(client: Client, message: Message):
 
 
 # ── /hayvan ──
-@Client.on_message(clean_command(["hayvan", "tatli"]))
+@Client.on_message(clean_command(["hayvan", "tatli", "tatlı", "sevimlihayvan", "sevimli"]))
 async def hayvan_command(client: Client, message: Message):
 
     """/hayvan komutu: Rastgele sevimli bir hayvan GIF'i ve adı gönderir."""
@@ -290,7 +312,7 @@ async def hayvan_command(client: Client, message: Message):
 
 
 # ── /yildiz & /yıldız ──
-@Client.on_message(clean_command(["yildiz", "yıldız", "burc", "burç"]))
+@Client.on_message(clean_command(["yildiz", "yıldız", "burc", "burç", "yildizfali", "yıldızfalı"]))
 async def yildiz_command(client: Client, message: Message):
     """/yıldız komutu: Rastgele yıldız & burç falı yorumu sunar."""
     yildiz = random.choice(YILDIZ_FALLARI)
@@ -307,7 +329,7 @@ async def yildiz_command(client: Client, message: Message):
 
 
 # ── /saksak, /şakşak, /iltifat ──
-@Client.on_message(clean_command(["saksak", "şakşak", "iltifat", "ovgu"]))
+@Client.on_message(clean_command(["saksak", "şakşak", "iltifat", "ovgu", "övgü"]))
 async def saksak_command(client: Client, message: Message):
     """/şakşak veya /iltifat komutu: Kullanıcıya tatlı bir iltifat eder."""
     iltifat = random.choice(ILTIFATLAR)
@@ -434,7 +456,11 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
                 f"🎯 **Gelen Zar:** **{dice_emojis[num - 1]}**\n\n"
                 f"✨ *Tekrar atmak için `/zar` yazabilirsiniz.*"
             )
-            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            zar_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🎲 Tekrar Zar At", callback_data="sosyal_zar")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=zar_kb)
             await callback.answer(f"🎲 Zar: {num} geldi!")
 
         elif data == "sosyal_kahve":
@@ -445,7 +471,11 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
                 f"{fal}\n\n"
                 f"✨ *Detaylı fal için: `/kahve`*"
             )
-            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            kahve_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("☕ Yeni Fal Bak", callback_data="sosyal_kahve")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=kahve_kb)
             await callback.answer("☕ Falınız bakıldı!")
 
         elif data == "sosyal_sans":
@@ -457,17 +487,29 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
                 f"🔥 **Oran:** `%{pct}`\n\n"
                 f"✨ *Tekrar denemek için: `/şans`*"
             )
-            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            sans_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🍀 Tekrar Ölç", callback_data="sosyal_sans")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=sans_kb)
             await callback.answer(f"🍀 Şansınız: %{pct}")
 
         elif data == "sosyal_fikra":
             fikra = random.choice(FIKRALAR)
-            await callback.message.edit_text(fikra, reply_markup=back_kb)
+            fikra_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🎭 Başka Fıkra", callback_data="sosyal_fikra")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(fikra, reply_markup=fikra_kb)
             await callback.answer("🎭 Fıkra hazır!")
 
         elif data == "sosyal_siir":
             siir = random.choice(SIIRLER)
-            await callback.message.edit_text(siir, reply_markup=back_kb)
+            siir_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📜 Başka Şiir", callback_data="sosyal_siir")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(siir, reply_markup=siir_kb)
             await callback.answer("📜 Şiir hazır!")
 
         elif data == "sosyal_yildiz":
@@ -475,9 +517,14 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
             out_text = (
                 f"⭐ **YILDIZ & BURÇ FALI** ⭐\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{yildiz}"
+                f"{yildiz}\n\n"
+                f"✨ *Tekrar bakmak için: `/yıldız`*"
             )
-            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            yildiz_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⭐ Yeni Fal Bak", callback_data="sosyal_yildiz")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=yildiz_kb)
             await callback.answer("⭐ Yıldızınız parlıyor!")
 
         elif data == "sosyal_hayvan":
@@ -486,9 +533,13 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
                 f"🐾 **GÜNÜN SEVİMLİ DOSTU** 🐾\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"✨ Seçilen Dost: {name}\n\n"
-                f"*(GIF'li görmek için sohbete `/hayvan` yazabilirsiniz!)*"
+                f"*(GIF'li animasyon için sohbete `/hayvan` yazabilirsiniz!)*"
             )
-            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            hayvan_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🐾 Başka Hayvan", callback_data="sosyal_hayvan")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=hayvan_kb)
             await callback.answer("🐶 Sevimli dost seçildi!")
 
         elif data == "sosyal_saksak":
@@ -496,13 +547,180 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
             out_text = (
                 f"💐 **ÖZEL İLTİFAT KÖŞESİ** 💐\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{iltifat}"
+                f"{iltifat}\n\n"
+                f"✨ *Yeni iltifat için: `/şakşak`*"
             )
-            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            saksak_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("💐 Yeni İltifat", callback_data="sosyal_saksak")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=saksak_kb)
             await callback.answer("💐 İltifat fısıldandı!")
 
+        elif data == "sosyal_hava":
+            hava = random.choice(HAVALAR)
+            out_text = (
+                f"🌤️ **GÜNLÜK HAVA DURUMU** 🌤️\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{hava}\n\n"
+                f"✨ *Detaylı tahmin için: `/hava`*"
+            )
+            hava_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🌤️ Başka Hava", callback_data="sosyal_hava")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=hava_kb)
+            await callback.answer("🌤️ Hava durumu güncellendi!")
+
+        elif data == "sosyal_slap":
+            sender = callback.from_user
+            sender_name = sender.first_name if sender else "Ejderha"
+            sender_id = sender.id if sender else 0
+
+            target_user = None
+            target_name = "Kendisi"
+            target_id = sender_id
+
+            if callback.message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+                target_user = await _get_random_chat_member(client, chat_id, exclude_ids={sender_id})
+                if target_user:
+                    target_name = target_user.first_name
+                    target_id = target_user.id
+
+            if target_user:
+                target_display = target_name
+            else:
+                target_display = "Havaya (Boşluğa)"
+
+            if sender_id and target_id and target_id != sender_id:
+                await record_slap_event(sender_id, sender_name, target_id, target_name)
+
+            out_text = (
+                f"🥊 **OSMANLI TOKADI İNDİRİLDİ!** 💥\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👋 **{sender_name}**, hedefine kilitlendi ve **{target_display}**'a sert bir Osmanlı tokadı yapıştırdı! 💫\n\n"
+                f"📌 *Belirli birine tokat atmak için: `/slap @kullanıcı` veya bir mesaja `/slap` yanıtı verin!*"
+            )
+            slap_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🥊 Tekrar Tokatla", callback_data="sosyal_slap")],
+                [
+                    InlineKeyboardButton("🏆 Tokat Tablosu", callback_data="sosyal_slapboard"),
+                    InlineKeyboardButton("🔙 Sosyal Menü", callback_data="sosyal_refresh"),
+                ],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=slap_kb)
+            await callback.answer("🥊 Tokat patlatıldı!")
+
+        elif data == "sosyal_slapboard":
+            leaders = await get_slap_leaderboard(limit=10)
+            if not leaders:
+                out_text = (
+                    f"🥊 **TOKAT LİDERLİK TABLOSU** 🥊\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"Henüz kimse tokat atmadı! İlk tokadı sen patlat:\n"
+                    f"👉 `/slap` veya aşağıdaki butonla tokatla!"
+                )
+            else:
+                sorted_givers = sorted(leaders, key=lambda x: x.get("slaps_given", 0), reverse=True)[:5]
+                sorted_receivers = sorted(leaders, key=lambda x: x.get("slaps_received", 0), reverse=True)[:5]
+                medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+
+                givers_text = ""
+                for idx, item in enumerate(sorted_givers):
+                    c = item.get("slaps_given", 0)
+                    if c > 0:
+                        n = item.get("user_name", f"Kullanıcı_{item.get('user_id')}")
+                        givers_text += f"{medals[idx]} **{n}** — `{c}` tokat\n"
+                if not givers_text:
+                    givers_text = "Henüz tokat atan yok.\n"
+
+                receivers_text = ""
+                for idx, item in enumerate(sorted_receivers):
+                    c = item.get("slaps_received", 0)
+                    if c > 0:
+                        n = item.get("user_name", f"Kullanıcı_{item.get('user_id')}")
+                        receivers_text += f"{medals[idx]} **{n}** — `{c}` tokat\n"
+                if not receivers_text:
+                    receivers_text = "Henüz tokat yiyen yok.\n"
+
+                total_slaps = sum(d.get("slaps_given", 0) for d in leaders)
+                out_text = (
+                    f"🏆 **EJDERHA TOKAT LİDERLİK TABLOSU** 🏆\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🥊 **EN ÇOK TOKAT ATANLAR:**\n{givers_text}\n"
+                    f"🤕 **EN ÇOK TOKAT YİYENLER:**\n{receivers_text}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"💥 **Toplam Atılan Tokat:** `{total_slaps}`\n"
+                    f"✨ *Sıralamaya girmek için: `/slap`*"
+                )
+
+            slapboard_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🥊 Tokat At", callback_data="sosyal_slap")],
+                [
+                    InlineKeyboardButton("🔄 Tabloyu Yenile", callback_data="sosyal_slapboard"),
+                    InlineKeyboardButton("🔙 Sosyal Menü", callback_data="sosyal_refresh"),
+                ],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=slapboard_kb)
+            await callback.answer("🏆 Tokat tablosu yüklendi!")
+
+        elif data == "sosyal_ship":
+            sender = callback.from_user
+            sender_name = sender.first_name if sender else "Sen"
+            sender_id = sender.id if sender else 0
+
+            u1_name = sender_name
+            u1_id = sender_id
+            u2_name = "Gizemli Üye"
+            u2_id = 999999
+
+            if callback.message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+                rand_u = await _get_random_chat_member(client, chat_id, exclude_ids={sender_id})
+                if rand_u:
+                    u2_name = rand_u.first_name
+                    u2_id = rand_u.id
+                else:
+                    u2_name = "Ejderha Bot 🐲"
+            else:
+                u2_name = "Ejderha Bot 🐲"
+
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            pair_key = f"{min(u1_id, u2_id)}_{max(u1_id, u2_id)}_{today_str}_{random.randint(1, 1000)}"
+            percent = int(hashlib.md5(pair_key.encode()).hexdigest(), 16) % 101
+
+            filled = round(percent / 10)
+            empty = 10 - filled
+            progress_bar = "█" * filled + "░" * empty
+
+            if percent <= 20:
+                verdict = "💔 **İmkansız Aşk!** Birbirinizi gördüğünüz yerde arkanıza bakmadan kaçın! 🏃‍♂️💨"
+            elif percent <= 45:
+                verdict = "😐 **İdare Eder...** Arkadaş kalırsanız iki taraf için de daha hayırlı olur."
+            elif percent <= 70:
+                verdict = "💕 **Tatlı Bir Uyum!** Aranızda güzel bir çekim var, bir kahve için. ☕✨"
+            elif percent <= 88:
+                verdict = "🔥 **Ateşli Çift!** Tutku ve aşk ejderhanın alevi gibi yükseliyor! 🐉❤️"
+            else:
+                verdict = "💍 **Efsanevi Ruh İkizleri!** Nikah masası hazır, hemen evlenin! 💒👑"
+
+            out_text = (
+                f"💘 **EJDERHA AŞK ÖLÇER (SHIP)** 💘\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **1. Kişi:** {u1_name}\n"
+                f"👤 **2. Kişi:** {u2_name}\n\n"
+                f"📊 **Aşk Uyumu:** `[{progress_bar}] %{percent}`\n"
+                f"💬 **Ejderha Yorumu:**\n{verdict}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"✨ *İstediğiniz iki kişiyi eşleştirmek için: `/ship @üye1 @üye2`*"
+            )
+            ship_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("💘 Başka Çift Dene", callback_data="sosyal_ship")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=ship_kb)
+            await callback.answer(f"💘 Uyum: %{percent}!")
+
         elif data == "sosyal_gruprapor":
-            from datetime import datetime
             today_str = datetime.now().strftime("%Y-%m-%d")
             chat_title = callback.message.chat.title or "Bu Grup"
 
@@ -538,11 +756,14 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
                 f"\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"✨ *Detaylı liste için: `/mesajlar`*"
             )
-            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            rapor_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Raporu Güncelle", callback_data="sosyal_gruprapor")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=rapor_kb)
             await callback.answer()
 
         elif data == "sosyal_mesajlar":
-            from datetime import datetime
             today_str = datetime.now().strftime("%Y-%m-%d")
 
             leaders = await get_daily_leaderboard(chat_id=chat_id, limit=5)
@@ -568,7 +789,11 @@ async def sosyal_callback_handler(client: Client, callback: CallbackQuery):
                 f"\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"👑 Günün Lideri: **{leaders[0].get('name', 'Ejderha')}**"
             )
-            await callback.message.edit_text(out_text, reply_markup=back_kb)
+            mesaj_kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Sıralamayı Güncelle", callback_data="sosyal_mesajlar")],
+                [InlineKeyboardButton("🔙 Sosyal Menüye Dön", callback_data="sosyal_refresh")],
+            ])
+            await callback.message.edit_text(out_text, reply_markup=mesaj_kb)
             await callback.answer()
 
 

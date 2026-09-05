@@ -195,7 +195,7 @@ async def real_dragon_command(client: Client, message: Message):
 # ══════════════════════════════════════════════════════════════
 # 4. GRUP BAZLI DETAYLI ANALİZ RAPORU (/gruprapor, /rapor, /analiz)
 # ══════════════════════════════════════════════════════════════
-@Client.on_message(clean_command(["gruprapor", "rapor", "analiz"]))
+@Client.on_message(clean_command(["gruprapor", "rapor", "analiz", "grupanaliz"]))
 async def group_report_command(client: Client, message: Message):
     """
     /gruprapor veya /rapor komutu:
@@ -203,6 +203,14 @@ async def group_report_command(client: Client, message: Message):
     günün birincisi (Gerçek Ejderha) ve ilk 3 aktif üyeyi listeler.
     Herkese açıktır.
     """
+    if message.chat.type == ChatType.PRIVATE:
+        await message.reply_text(
+            "ℹ️ `/gruprapor` komutu gruplardaki mesaj trafiğini ve aktifliği analiz eder.\n"
+            "Bu komutu bir grupta çalıştırarak grubun detaylı analiz raporunu görebilirsiniz! 🐲\n\n"
+            "✨ Sosyal eğlence menüsü için: `/sosyal`"
+        )
+        return
+
     chat_id = message.chat.id
     chat_title = message.chat.title or "Bu Grup"
     today_str = datetime.now().strftime("%Y-%m-%d")

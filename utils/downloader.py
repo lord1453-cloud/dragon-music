@@ -30,7 +30,12 @@ from bot.config import (
     YOUTUBE_COOKIES_FROM_BROWSER,
 )
 from utils.cache import search_cache
-from utils.cookie_manager import GUEST_COOKIES_FILE, validate_cookie_file, get_browser_cookie_config
+from utils.cookie_manager import (
+    GUEST_COOKIES_FILE,
+    validate_cookie_file,
+    get_browser_cookie_config,
+    get_cookie_file_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +69,8 @@ def _sanitize_filename(name: str) -> str:
 
 def _get_auth_opts() -> dict:
     """Çerez ve yetkilendirme parametrelerini belirler."""
+    cookie_path = get_cookie_file_path(warn_if_missing=True)
+
     opts: Dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
@@ -85,16 +92,17 @@ def _get_auth_opts() -> dict:
         },
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "web"],
+                "player_client": ["android", "web", "tv"],
                 "player_skip": ["configs", "webpage"],
+                "skip": ["dash", "hls"],
                 "lang": ["tr"],
             }
         },
     }
 
     # Çerez önceliği
-    if YOUTUBE_COOKIE_FILE and os.path.exists(YOUTUBE_COOKIE_FILE):
-        opts["cookiefile"] = YOUTUBE_COOKIE_FILE
+    if cookie_path and os.path.exists(cookie_path):
+        opts["cookiefile"] = cookie_path
     elif os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 10:
         opts["cookiefile"] = GUEST_COOKIES_FILE
     else:

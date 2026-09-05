@@ -17,15 +17,17 @@ from bot.theme import (
     msg_not_playing, msg_no_voice_chat, msg_error,
     get_panel_text, get_panel_keyboard, get_player_keyboard,
     get_system_stats_text, get_stats_keyboard,
+    msg_clean_mode_status, get_settings_keyboard,
 )
 from utils.queue_manager import queue
+from utils.db import get_chat_setting, set_chat_setting
 from utils.ytdl import (
     get_audio_file_for_stream,
     get_video_file_for_stream,
     cleanup_old_streams,
 )
-from utils.decorators import check_voice_chat, clean_command
-from bot.plugins.play import make_stream
+from utils.decorators import check_voice_chat, clean_command, admin_only
+from bot.plugins.play import make_stream, _play_next, _cancel_all_timers
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,7 @@ async def panel_command(client: Client, message: Message):
 
     current_track = await queue.get_current(chat_id)
     queue_tracks = await queue.get_queue(chat_id)
+    clean_mode = await get_chat_setting(chat_id, "clean_mode", default=False)
 
     panel_text = get_panel_text(
         chat_title=chat_title,
@@ -78,7 +81,57 @@ async def panel_command(client: Client, message: Message):
 
     await message.reply_text(
         text=panel_text,
-        reply_markup=get_panel_keyboard(is_paused=False),
+        reply_markup=get_panel_keyboard(is_paused=False, clean_mode=clean_mode),
+    )
+
+
+# ── Grup Temiz Mod & Mesaj Silme Ayarı Komutu ──────────────────
+@Client.on_message(clean_command(["temizmod", "mesajsil", "mesajsilme", "temiz_mod"]) & filters.group)
+@admin_only("⛔ Temiz mod ayarını yalnızca grup yöneticileri değiştirebilir!")
+async def clean_mode_command(client: Client, message: Message):
+    """
+    /temizmod veya /mesajsil komutu:
+    Şarkı arama ve kuyruğa ekleme mesajlarının 7 saniye sonra
+    otomatik silinip silinmeyeceğini ayarlar.
+    """
+    chat_id = message.chat.id
+    current_setting = await get_chat_setting(chat_id, "clean_mode", default=False)
+
+    args = message.command[1:] if len(message.command) > 1 else []
+    if args:
+        sub = args[0].lower()
+        if sub in ["ac", "aç", "on", "aktif", "true", "1", "evet"]:
+            new_val = True
+        elif sub in ["kapat", "off", "pasif", "false", "0", "hayır"]:
+            new_val = False
+        else:
+            new_val = not current_setting
+    else:
+        new_val = not current_setting
+
+    await set_chat_setting(chat_id, "clean_mode", new_val)
+    await message.reply_text(msg_clean_mode_status(new_val))
+
+
+# ── Grup Ayarları Menüsü Komutu ───────────────────────────────
+@Client.on_message(clean_command(["ayarlar", "ayar", "settings"]) & filters.group)
+@admin_only("⛔ Grup ayarlarını yalnızca grup yöneticileri görüntüleyebilir!")
+async def settings_command(client: Client, message: Message):
+    """
+    /ayarlar komutu:
+    Grup bazlı ayarları ve mesaj silme butonunu gösterir.
+    """
+    chat_id = message.chat.id
+    clean_mode = await get_chat_setting(chat_id, "clean_mode", default=False)
+    status_text = (
+        f"⚙️ **GRUP AYARLARI**\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🗑️ **Şarkı Mesajlarını Silme:** {'Açık ✅ (7sn sonra silinir)' if clean_mode else 'Kapalı ❌ (Mesajlar kalır)'}\n\n"
+        f"💡 *Aşağıdaki butona tıklayarak ayarı anında değiştirebilirsiniz.*"
+    )
+    await message.reply_text(
+        text=status_text,
+        reply_markup=get_settings_keyboard(clean_mode=clean_mode),
     )
 
 
@@ -151,49 +204,8 @@ async def skip_command(client: Client, message: Message):
         await message.reply_text(msg_not_playing())
         return
 
-    next_track = await queue.next(chat_id)
-
-    if next_track:
-        is_video = next_track.get("stream_type") == "video"
-        try:
-            if is_video:
-                file_path = await get_video_file_for_stream(next_track["url"])
-            else:
-                file_path = await get_audio_file_for_stream(next_track["url"], title=next_track.get("title"))
-
-            if not file_path:
-                await message.reply_text(msg_error("Sıradaki medya dosyası indirilemedi."))
-                return
-
-            await call_client.change_stream(
-                chat_id,
-                make_stream(file_path, is_video=is_video),
-            )
-            await message.reply_text(msg_skipped(next_track["title"], is_video=is_video))
-
-            asyncio.create_task(cleanup_old_streams(keep_path=file_path))
-
-            tracks = await queue.get_queue(chat_id)
-            if tracks:
-                preload_track = tracks[0]
-                preload_video = preload_track.get("stream_type") == "video"
-                if preload_video:
-                    asyncio.create_task(get_video_file_for_stream(preload_track["url"]))
-                else:
-                    asyncio.create_task(get_audio_file_for_stream(preload_track["url"], title=preload_track.get("title")))
-
-        except Exception as e:
-            logger.error(f"Atlama hatası: {e}")
-            await message.reply_text(msg_error(str(e)))
-    else:
-        try:
-            await call_client.leave_group_call(chat_id)
-        except Exception:
-            pass
-        await queue.clear(chat_id)
-        await message.reply_text(msg_skipped())
-
-        asyncio.create_task(cleanup_old_streams())
+    await message.reply_text("⏭️ **Şarkı atlandı, sıradakine geçiliyor...**")
+    await _play_next(client, chat_id)
 
 
 @Client.on_message(clean_command(["durdur", "bitir", "son", "kapat"]) & filters.group)
@@ -204,6 +216,7 @@ async def stop_command(client: Client, message: Message):
     Yayını tamamen durdurur, kuyruğu temizler ve sesli sohbetten ayrılır.
     """
     chat_id = message.chat.id
+    _cancel_all_timers(chat_id)
 
     try:
         await call_client.leave_group_call(chat_id)
