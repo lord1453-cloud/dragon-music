@@ -11,11 +11,14 @@
 
 import os
 import gc
+import re
 import logging
 from typing import Tuple
 
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.enums import ChatType
+from pyrogram.errors import RPCError, Forbidden
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from bot.theme import (
     msg_searching,
@@ -24,6 +27,8 @@ from bot.theme import (
     msg_video_downloading,
     msg_video_complete,
     msg_file_too_large,
+    msg_media_sent_to_pm,
+    msg_media_permission_error,
     msg_error,
     msg_usage,
 )
@@ -83,6 +88,138 @@ def _parse_audio_args(command_parts: list) -> Tuple[int, str]:
     return bitrate, query
 
 
+# ── Medya Gönderim Yardımcısı (İzin Kısıtlamaları Korumalı) ──
+
+async def _send_media_with_fallback(
+    client: Client,
+    message: Message,
+    status_msg: Message,
+    file_path: str,
+    media_type: str,
+    title: str,
+    caption: str,
+    duration: int = 0,
+    performer: str = "Ejderha Müzik",
+) -> None:
+    """
+    Videoyu veya sesi Telegram'a gönderir.
+    Grupta video/ses izni kısıtlıysa (403 CHAT_SEND_VIDEOS_FORBIDDEN vb.):
+    1. Belge (document/dosya) olarak göndermeyi dener.
+    2. Grupta belge izni de yoksa, kullanıcıya DM (özel mesaj) üzerinden göndermeyi dener.
+    3. Kullanıcıya özelden de atamazsa (DM başlatılmamışsa), bilgilendirici mesaj ve DM butonu sunar.
+    """
+    # 1. Aşama: Asıl medya formatında sohbete göndermeyi dene
+    try:
+        if media_type == "video":
+            await message.reply_video(
+                video=file_path,
+                caption=caption,
+                duration=duration,
+                supports_streaming=True,
+            )
+        else:
+            await message.reply_audio(
+                audio=file_path,
+                title=title,
+                performer=performer,
+                duration=duration,
+                caption=caption,
+            )
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        return
+    except Exception as first_err:
+        err_str = str(first_err).upper()
+        is_forbidden = (
+            isinstance(first_err, Forbidden)
+            or "FORBIDDEN" in err_str
+            or "CHAT_SEND_VIDEOS_FORBIDDEN" in err_str
+            or "CHAT_SEND_AUDIOS_FORBIDDEN" in err_str
+            or "CHAT_SEND_MEDIA_FORBIDDEN" in err_str
+        )
+        if not is_forbidden:
+            raise first_err
+
+        logger.warning(
+            f"Grupta {media_type} gönderme izni kısıtlı ({first_err}). Belge (document) olarak deneniyor..."
+        )
+
+    # 2. Aşama: Belge (document) olarak sohbete göndermeyi dene
+    clean_title = re.sub(r'[\\/*?:"<>|]', "", title).strip() or media_type
+    ext = ".mp4" if media_type == "video" else ".mp3"
+    file_name = f"{clean_title[:50]}{ext}"
+
+    try:
+        await message.reply_document(
+            document=file_path,
+            caption=caption,
+            file_name=file_name,
+        )
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        return
+    except Exception as doc_err:
+        logger.warning(f"Belge olarak gönderme de kısıtlı ({doc_err})")
+
+    # 3. Aşama: Kullanıcıya özel mesajdan (DM) göndermeyi dene
+    user_id = message.from_user.id if message.from_user else None
+    is_group = message.chat.type != ChatType.PRIVATE
+
+    bot_me = getattr(client, "me", None)
+    if not bot_me and client.is_connected:
+        try:
+            bot_me = await client.get_me()
+        except Exception:
+            pass
+    bot_username = getattr(bot_me, "username", None) or "DragonMusicBot"
+
+    if user_id and is_group:
+        logger.info(f"Grupta medya gönderimi kapalı. Kullanıcıya ({user_id}) özel mesajdan gönderiliyor...")
+        try:
+            if media_type == "video":
+                await client.send_video(
+                    chat_id=user_id,
+                    video=file_path,
+                    caption=caption,
+                    duration=duration,
+                    supports_streaming=True,
+                )
+            else:
+                await client.send_audio(
+                    chat_id=user_id,
+                    audio=file_path,
+                    title=title,
+                    performer=performer,
+                    duration=duration,
+                    caption=caption,
+                )
+
+            # Gruba DM'e gönderildiğini bildir
+            btn = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📩 Dosyayı Gör (Bota Git)", url=f"https://t.me/{bot_username}")]
+            ])
+            try:
+                await status_msg.edit_text(msg_media_sent_to_pm(media_type), reply_markup=btn)
+            except Exception:
+                pass
+            return
+        except Exception as pm_err:
+            logger.warning(f"Kullanıcıya DM ile gönderilemedi ({pm_err}). Kullanıcı botu DM'de başlatmamış olabilir.")
+
+    # 4. Aşama: Hiçbiri olmadıysa, gruba kibar ve yönlendirici mesaj göster
+    btn = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🤖 Bota Git (Özelden İndir)", url=f"https://t.me/{bot_username}?start=dl")]
+    ])
+    try:
+        await status_msg.edit_text(msg_media_permission_error(media_type), reply_markup=btn)
+    except Exception:
+        pass
+
+
 # ── 1. /video Komutu (MP4 Video İndirme) ───────────────────────
 
 @Client.on_message(clean_command(["video", "videoindir"]))
@@ -132,30 +269,37 @@ async def video_download_command(client: Client, message: Message):
             await status_msg.edit_text(msg_error("İndirilen video dosyasına ulaşılamadı."))
             return
 
-        # Telegram'a video olarak gönder
+        # Telegram'a video olarak gönder (izin kısıtlamalarına karşı yedekli)
         title = result.get("title", "Video")
         size_mb = result.get("size_mb", 0.0)
         duration = result.get("duration", 0)
 
-        await message.reply_video(
-            video=downloaded_file,
-            caption=msg_video_complete(title=title, quality=quality, size_mb=size_mb),
+        caption = msg_video_complete(title=title, quality=quality, size_mb=size_mb)
+        await _send_media_with_fallback(
+            client=client,
+            message=message,
+            status_msg=status_msg,
+            file_path=downloaded_file,
+            media_type="video",
+            title=title,
+            caption=caption,
             duration=duration,
-            supports_streaming=True,
         )
 
-        # Durum mesajını kaldır
-        try:
-            await status_msg.delete()
-        except Exception:
-            pass
-
     except Exception as e:
-        logger.error(f"/video işlem hatası: {e}", exc_info=True)
-        try:
-            await status_msg.edit_text(msg_error(f"Video gönderilemedi: {e}"))
-        except Exception:
-            pass
+        err_str = str(e).upper()
+        if isinstance(e, Forbidden) or "FORBIDDEN" in err_str:
+            logger.warning(f"/video izin kısıtlaması nedeniyle gönderilemedi: {e}")
+            try:
+                await status_msg.edit_text(msg_media_permission_error("video"))
+            except Exception:
+                pass
+        else:
+            logger.error(f"/video işlem hatası: {e}", exc_info=True)
+            try:
+                await status_msg.edit_text(msg_error(f"Video gönderilemedi: {e}"))
+            except Exception:
+                pass
     finally:
         # Geçici dosyayı kesinlikle sil ve belleği temizle
         if downloaded_file:
@@ -213,26 +357,33 @@ async def audio_download_command(client: Client, message: Message):
         performer = result.get("performer", "Ejderha Müzik")
         duration = result.get("duration", 0)
 
-        # Telegram'a müzik dosyası olarak gönder
-        await message.reply_audio(
-            audio=downloaded_file,
+        caption = msg_download_complete(title=title)
+        await _send_media_with_fallback(
+            client=client,
+            message=message,
+            status_msg=status_msg,
+            file_path=downloaded_file,
+            media_type="audio",
             title=title,
-            performer=performer,
+            caption=caption,
             duration=duration,
-            caption=msg_download_complete(title=title),
+            performer=performer,
         )
 
-        try:
-            await status_msg.delete()
-        except Exception:
-            pass
-
     except Exception as e:
-        logger.error(f"/indir işlem hatası: {e}", exc_info=True)
-        try:
-            await status_msg.edit_text(msg_error(f"Ses dosyası gönderilemedi: {e}"))
-        except Exception:
-            pass
+        err_str = str(e).upper()
+        if isinstance(e, Forbidden) or "FORBIDDEN" in err_str:
+            logger.warning(f"/indir izin kısıtlaması nedeniyle gönderilemedi: {e}")
+            try:
+                await status_msg.edit_text(msg_media_permission_error("audio"))
+            except Exception:
+                pass
+        else:
+            logger.error(f"/indir işlem hatası: {e}", exc_info=True)
+            try:
+                await status_msg.edit_text(msg_error(f"Ses dosyası gönderilemedi: {e}"))
+            except Exception:
+                pass
     finally:
         if downloaded_file:
             cleanup_file(downloaded_file)

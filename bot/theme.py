@@ -398,6 +398,32 @@ def msg_file_too_large(size_mb: float, limit_mb: int = 50) -> str:
     )
 
 
+def msg_media_sent_to_pm(media_type: str = "video") -> str:
+    """Grupta medya gönderme izni kısıtlı olduğunda ve dosya DM'e gönderildiğinde."""
+    name = "Videoyu" if media_type == "video" else "Müzik dosyasını"
+    return (
+        f"⚠️ **Grupta Medya Gönderimi Kısıtlı!** {DRAGON}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Bu grupta video/medya gönderme yetkisi kapalı olduğu için {name.lower()} "
+        f"size **özel mesaj (DM)** olarak gönderdim! 📥\n\n"
+        f"{SPARKLE} *Dosyanıza ulaşmak için aşağıdaki butona tıklayabilirsiniz.*"
+    )
+
+
+def msg_media_permission_error(media_type: str = "video") -> str:
+    """Grupta medya gönderme izni kısıtlı ve DM gönderilemediğinde."""
+    name = "Video" if media_type == "video" else "Ses"
+    cmd = "/video" if media_type == "video" else "/indir"
+    return (
+        f"⚠️ **{name} Gönderme Yetkisi Yok!** {DRAGON}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Bu grupta botun medya/{name.lower()} gönderme izni kısıtlanmış.\n\n"
+        f"💡 **Nasıl indirebilirsiniz?**\n"
+        f"1️⃣ Grup yöneticisinden botun video/medya iznini açmasını isteyebilirsiniz.\n"
+        f"2️⃣ Veya aşağıdaki butona basıp botu başlatarak özel mesajda (DM) `{cmd}` komutu ile indirebilirsiniz!"
+    )
+
+
 def msg_error(detail: str = "") -> str:
     """Hata mesajı."""
     extra = f"\n\n{SCROLL} Detay: `{detail}`" if detail else ""
