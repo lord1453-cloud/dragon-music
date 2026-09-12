@@ -35,6 +35,10 @@ from utils.cookie_manager import (
     validate_cookie_file,
     get_browser_cookie_config,
     get_cookie_file_path,
+    get_auth_strategies,
+    build_ytdl_options,
+    is_bot_challenge_error,
+    parse_media_query_args,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,134 +73,58 @@ def _sanitize_filename(name: str) -> str:
 
 def _is_bot_challenge(err_msg: Any) -> bool:
     """yt-dlp veya YouTube hata mesajının bot kontrolü olup olmadığını tespit eder (TR ve EN)."""
-    err_str = str(err_msg).lower()
-    return (
-        "bot olmadığınızı" in err_str or
-        "oturum açın" in err_str or
-        "topluluğumuzu korumamıza yardımcı olur" in err_str or
-        "daha fazla bilgi" in err_str or
-        "sign in to confirm you're not a bot" in err_str or
-        "confirm you're not a bot" in err_str or
-        "confirm you’re not a bot" in err_str or
-        "bot confirmation" in err_str or
-        "use --cookies" in err_str or
-        "this video is not available" in err_str or
-        "kullanılamıyor" in err_str or
-        "kullanilamiyor" in err_str or
-        "requested format is not available" in err_str
-    )
+    return is_bot_challenge_error(err_msg)
 
 
-def _get_auth_strategies() -> list:
+def _get_auth_strategies(custom_cookie_path: Optional[str] = None, custom_browser: Optional[str] = None) -> list:
     """
-    YouTube işlemleri için öncelik sırasına göre indirme/arama stratejilerini üretir:
-    1. Geçerli kullanıcı çerez dosyası (cookies.txt)
-    2. Otomatik üretilen taze misafir çerezleri (guest_cookies.txt)
-    3. Tarayıcı çerezleri (cookiesfrombrowser)
-    4. EJS Challenge Solver destekli temiz çerezsiz istek (En kararlı)
+    YouTube işlemleri için öncelik sırasına göre çok aşamalı fallback zinciri üretir.
     """
-    strategies = []
-
-    # 1. Öncelik: Kullanıcı Çerez Dosyası (Geçerli ise)
-    cookie_path = get_cookie_file_path(warn_if_missing=False)
-    if cookie_path and os.path.exists(cookie_path):
-        is_valid, _ = validate_cookie_file(cookie_path)
-        if is_valid:
-            strategies.append({
-                "type": "cookiefile",
-                "cookiefile": cookie_path,
-                "label": f"User Cookie ({os.path.basename(cookie_path)})",
-            })
-
-    # 2. Öncelik: Misafir Çerezleri (GUEST_COOKIES_FILE)
-    if os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 10:
-        strategies.append({
-            "type": "cookiefile",
-            "cookiefile": GUEST_COOKIES_FILE,
-            "label": "Guest Cookie",
-        })
-
-    # 3. Öncelik: Tarayıcı Çerezleri
-    browser = get_browser_cookie_config()
-    if browser:
-        strategies.append({
-            "type": "browser",
-            "browser": browser,
-            "cookiesfrombrowser": (browser,),
-            "label": f"Browser Cookies ({browser})",
-        })
-
-    # 4. Öncelik: Çerezsiz + EJS Challenge Solver (En kararlı yöntem)
-    strategies.append({
-        "type": "none",
-        "label": "Clean EJS (Çerezsiz)",
-    })
-
-    return strategies
+    return get_auth_strategies(custom_cookie_path=custom_cookie_path, custom_browser=custom_browser)
 
 
 def _build_ytdl_opts(strategy: Optional[dict] = None, extra_opts: Optional[dict] = None) -> dict:
     """
-    yt-dlp için EJS challenge solver destekli ve hatasız temel seçenekleri oluşturur.
+    yt-dlp için EJS challenge solver ve User-Agent rotasyonu destekli seçenekleri oluşturur.
     """
-    opts: Dict[str, Any] = {
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        "geo_bypass": True,
-        "nocheckcertificate": True,
-        "socket_timeout": 25,
-        "retries": 3,
-        "fragment_retries": 3,
-        "skip_unavailable_fragments": True,
-        "no_color": True,
-        "remote_components": ["ejs:github"],
-        "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/128.0.0.0 Safari/537.36"
-            ),
-            "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        },
-    }
-
-    if strategy:
-        if strategy.get("type") == "cookiefile" and strategy.get("cookiefile"):
-            opts["cookiefile"] = strategy["cookiefile"]
-        elif strategy.get("type") == "browser" and strategy.get("cookiesfrombrowser"):
-            opts["cookiesfrombrowser"] = strategy["cookiesfrombrowser"]
-
-    if extra_opts:
-        opts.update(extra_opts)
-
-    return opts
+    return build_ytdl_options(strategy=strategy, extra_opts=extra_opts)
 
 
 # ── Medya Arama (Cache Destekli) ──────────────────────────────
 
-async def search_media(query: str, is_video: bool = False) -> Optional[Dict[str, Any]]:
+async def search_media(
+    query: str,
+    is_video: bool = False,
+    cookie_path: Optional[str] = None,
+    browser: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     """
     YouTube üzerinde arama yapar veya doğrudan linki çözümler.
     Arama sonuçlarını utils/cache.py üzerinden 1 saat önbellekler.
-    Çoklu kimlik doğrulama stratejisi ve EJS challenge solver destekler.
+    --cookies-from-browser, --cookies ve çoklu fallback stratejilerini destekler.
     """
-    cache_key = f"ytdl_search:{'v' if is_video else 'a'}:{query.strip().lower()}"
+    clean_query, parsed_browser, parsed_cookie_path = parse_media_query_args(
+        query, default_browser=browser, default_cookie_path=cookie_path
+    )
+    if not clean_query:
+        return None
+
+    cache_key = f"ytdl_search:{'v' if is_video else 'a'}:{clean_query.strip().lower()}"
     cached_info = await search_cache.get(cache_key)
     if cached_info:
-        logger.debug(f"⚡ Arama önbellekten getirildi: {query}")
+        logger.debug(f"⚡ Arama önbellekten getirildi: {clean_query}")
         return cached_info
 
     def _sync_search():
-        strategies = _get_auth_strategies()
+        strategies = get_auth_strategies(custom_cookie_path=parsed_cookie_path, custom_browser=parsed_browser)
         last_error = None
         for strat in strategies:
             strat_label = strat.get("label", "Auth")
-            opts = _build_ytdl_opts(strategy=strat, extra_opts={
+            opts = build_ytdl_options(strategy=strat, extra_opts={
                 "extract_flat": "in_playlist",
                 "skip_download": True,
             })
-            url = query if query.startswith(("http://", "https://")) else f"ytsearch1:{query}"
+            url = clean_query if clean_query.startswith(("http://", "https://")) else f"ytsearch1:{clean_query}"
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(url, download=False)
@@ -220,14 +148,14 @@ async def search_media(query: str, is_video: bool = False) -> Optional[Dict[str,
                     }
             except Exception as e:
                 last_error = e
-                if _is_bot_challenge(e):
-                    logger.warning(f"⚠️ search_media bot doğrulaması ({strat_label}), sonraki stratejiye geçiliyor...")
+                if is_bot_challenge_error(e):
+                    logger.warning(f"⚠️ search_media bot doğrulaması/erişim engeli ({strat_label}), sonraki stratejiye geçiliyor...")
                 else:
                     logger.debug(f"search_media deneme hatası ({strat_label}): {e}")
                 continue
 
         if last_error:
-            logger.error(f"search_media hatası ({query}): {last_error}")
+            logger.error(f"search_media hatası ({clean_query}): {last_error}")
         return None
 
     loop = asyncio.get_running_loop()
@@ -237,20 +165,34 @@ async def search_media(query: str, is_video: bool = False) -> Optional[Dict[str,
             await search_cache.set(cache_key, result)
         return result
     except Exception as e:
-        logger.error(f"search_media genel hatası ({query}): {e}")
+        logger.error(f"search_media genel hatası ({clean_query}): {e}")
         return None
 
 
 # ── Video İndirme (/video için) ───────────────────────────────
 
-async def download_video(query_or_url: str, quality: str = "720p") -> Dict[str, Any]:
+async def download_video(
+    query_or_url: str,
+    quality: str = "720p",
+    cookie_path: Optional[str] = None,
+    browser: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     YouTube videosunu MP4 formatında 720p veya 480p olarak indirir.
     50 MB dosya sınırını kontrol eder.
+    --cookies-from-browser ve harici cookies.txt parametrelerini destekler.
     """
+    clean_query, parsed_browser, parsed_cookie_path = parse_media_query_args(
+        query_or_url, default_browser=browser, default_cookie_path=cookie_path
+    )
+    if not clean_query:
+        return {"success": False, "error": "not_found", "message": "Geçersiz arama terimi veya URL!"}
+
     async with _download_semaphore:
         # Önce meta veriyi çöz
-        info = await search_media(query_or_url, is_video=True)
+        info = await search_media(
+            clean_query, is_video=True, cookie_path=parsed_cookie_path, browser=parsed_browser
+        )
         if not info:
             return {"success": False, "error": "not_found", "message": "Video bulunamadı!"}
 
@@ -271,11 +213,11 @@ async def download_video(query_or_url: str, quality: str = "720p") -> Dict[str, 
         )
 
         def _sync_download_video():
-            strategies = _get_auth_strategies()
+            strategies = get_auth_strategies(custom_cookie_path=parsed_cookie_path, custom_browser=parsed_browser)
             last_err_msg = ""
             for strat in strategies:
                 strat_label = strat.get("label", "Auth")
-                opts = _build_ytdl_opts(strategy=strat, extra_opts={
+                opts = build_ytdl_options(strategy=strat, extra_opts={
                     "format": video_format,
                     "outtmpl": output_template,
                     "merge_output_format": "mp4",
@@ -338,8 +280,8 @@ async def download_video(query_or_url: str, quality: str = "720p") -> Dict[str, 
                             "message": "Video boyutu 50 MB sınırını aşıyor! Telegram botları 50 MB üzeri dosya gönderemez."
                         }
                     last_err_msg = str(e)
-                    if _is_bot_challenge(e):
-                        logger.warning(f"⚠️ Video indirmede bot doğrulaması tespit edildi ({strat_label}), sonraki strateji deneniyor...")
+                    if is_bot_challenge_error(e):
+                        logger.warning(f"⚠️ Video indirmede bot doğrulaması/erişim engeli ({strat_label}), sonraki strateji deneniyor...")
                     else:
                         logger.warning(f"Video indirme deneme hatası ({strat_label}): {e}")
                     continue
@@ -353,14 +295,28 @@ async def download_video(query_or_url: str, quality: str = "720p") -> Dict[str, 
 
 # ── Ses İndirme (/indir için) ─────────────────────────────────
 
-async def download_audio(query_or_url: str, bitrate: int = 192) -> Dict[str, Any]:
+async def download_audio(
+    query_or_url: str,
+    bitrate: int = 192,
+    cookie_path: Optional[str] = None,
+    browser: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Şarkıyı MP3 formatında indirir (192 kbps veya 128 kbps).
     50 MB sınırını kontrol eder.
+    --cookies-from-browser ve harici cookies.txt parametrelerini destekler.
     Çok stratejili EJS fallback mekanizması içerir.
     """
+    clean_query, parsed_browser, parsed_cookie_path = parse_media_query_args(
+        query_or_url, default_browser=browser, default_cookie_path=cookie_path
+    )
+    if not clean_query:
+        return {"success": False, "error": "not_found", "message": "Geçersiz arama terimi veya URL!"}
+
     async with _download_semaphore:
-        info = await search_media(query_or_url, is_video=False)
+        info = await search_media(
+            clean_query, is_video=False, cookie_path=parsed_cookie_path, browser=parsed_browser
+        )
         if not info:
             return {"success": False, "error": "not_found", "message": "Şarkı bulunamadı!"}
 
@@ -372,11 +328,11 @@ async def download_audio(query_or_url: str, bitrate: int = 192) -> Dict[str, Any
         target_mp3 = os.path.join(TEMP_DIR, f"aud_{timestamp}_{safe_name}.mp3")
 
         def _sync_download_audio():
-            strategies = _get_auth_strategies()
+            strategies = get_auth_strategies(custom_cookie_path=parsed_cookie_path, custom_browser=parsed_browser)
             last_err_msg = ""
             for strat in strategies:
                 strat_label = strat.get("label", "Auth")
-                opts = _build_ytdl_opts(strategy=strat, extra_opts={
+                opts = build_ytdl_options(strategy=strat, extra_opts={
                     "format": "bestaudio/best",
                     "outtmpl": output_template,
                     "max_filesize": MAX_FILE_SIZE,
@@ -436,8 +392,8 @@ async def download_audio(query_or_url: str, bitrate: int = 192) -> Dict[str, Any
                     if "larger than" in err_str:
                         return {"success": False, "error": "oversized", "message": "Ses dosyası 50 MB sınırını aşıyor."}
                     last_err_msg = str(e)
-                    if _is_bot_challenge(e):
-                        logger.warning(f"⚠️ Ses indirmede bot doğrulaması tespit edildi ({strat_label}), sonraki strateji deneniyor...")
+                    if is_bot_challenge_error(e):
+                        logger.warning(f"⚠️ Ses indirmede bot doğrulaması/erişim engeli ({strat_label}), sonraki strateji deneniyor...")
                     else:
                         logger.warning(f"Ses indirme deneme hatası ({strat_label}): {e}")
                     continue

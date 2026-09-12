@@ -44,7 +44,12 @@ LOG_GROUP_ID: Optional[int] = int(_log_group_raw.strip().strip("'\"")) if _log_g
 _base_dir: str = os.path.dirname(os.path.dirname(__file__))
 
 # 1. Ortam değişkeninden doğrudan Netscape çerez içeriği aktarılmışsa dosyaya yaz
-_cookies_data_env: Optional[str] = os.getenv("COOKIES_DATA") or os.getenv("YOUTUBE_COOKIES")
+_cookies_data_env: Optional[str] = (
+    os.getenv("COOKIES_DATA")
+    or os.getenv("YOUTUBE_COOKIES")
+    or os.getenv("COOKIE_CONTENT")
+    or os.getenv("YOUTUBE_COOKIE_CONTENT")
+)
 if _cookies_data_env and _cookies_data_env.strip():
     _auto_cookies_file = os.path.join(_base_dir, "cookies.txt")
     try:
@@ -53,9 +58,12 @@ if _cookies_data_env and _cookies_data_env.strip():
     except Exception:
         pass
 
-# 2. Netscape cookie dosyası yolu tespiti
+# 2. Netscape cookie dosyası yolu tespiti (cookies.txt)
 YOUTUBE_COOKIE_FILE_PATH: Optional[str] = (
-    os.getenv("YOUTUBE_COOKIE_FILE") or os.getenv("COOKIES_FILE_PATH") or os.getenv("COOKIE_FILE")
+    os.getenv("YOUTUBE_COOKIE_FILE")
+    or os.getenv("COOKIES_FILE_PATH")
+    or os.getenv("COOKIE_FILE")
+    or os.getenv("COOKIES_FILE")
 )
 _possible_cookie_paths = []
 if YOUTUBE_COOKIE_FILE_PATH and YOUTUBE_COOKIE_FILE_PATH.strip():
@@ -78,8 +86,14 @@ for _cp in _possible_cookie_paths:
 # Geriye dönük uyumluluk
 COOKIES_FILE: Optional[str] = YOUTUBE_COOKIE_FILE
 
-# 3. Tarayıcıdan otomatik çerez alma yapılandırması (chrome, edge, firefox, brave, opera, vivaldi vb.)
-_raw_browser = (os.getenv("YOUTUBE_COOKIES_FROM_BROWSER") or "").strip().strip("'\"").lower()
+# 3. Tarayıcıdan otomatik çerez alma yapılandırması (--cookies-from-browser: chrome, firefox, edge vb.)
+_raw_browser = (
+    os.getenv("YOUTUBE_COOKIES_FROM_BROWSER")
+    or os.getenv("COOKIES_FROM_BROWSER")
+    or os.getenv("BROWSER_COOKIES")
+    or os.getenv("COOKIES_BROWSER")
+    or ""
+).strip().strip("'\"").lower()
 YOUTUBE_COOKIES_FROM_BROWSER: Optional[str] = _raw_browser if _raw_browser else None
 
 # Spotify API Yapılandırması

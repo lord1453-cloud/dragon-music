@@ -29,22 +29,121 @@ _cookie_lock = asyncio.Lock()
 _missing_cookie_warned = False
 
 
-def get_cookie_file_path(warn_if_missing: bool = False) -> Optional[str]:
+# ── 1. Kullanıcı Ajanı (User-Agent) Rotasyon Havuzu ───────────
+USER_AGENTS = [
+    # Modern Chrome (Windows & Mac)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    # Modern Firefox (Linux & Windows)
+    "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0",
+    # Modern Edge (Windows)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0",
+    # Modern Safari (macOS)
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
+    # Android Chrome Mobil
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.6668.70 Mobile Safari/537.36",
+]
+
+
+def get_random_user_agent() -> str:
+    """Havuzdan rastgele modern bir User-Agent döndürür."""
+    import random
+    return random.choice(USER_AGENTS)
+
+
+def is_bot_challenge_error(err_msg: Any) -> bool:
+    """
+    yt-dlp veya YouTube hata mesajının bot kontrolü veya çerez veritabanı
+    erişim hatası olup olmadığını tespit eder (TR ve EN).
+    """
+    err_str = str(err_msg).lower()
+    return (
+        "bot olmadığınızı" in err_str or
+        "oturum açın" in err_str or
+        "topluluğumuzu korumamıza yardımcı olur" in err_str or
+        "daha fazla bilgi" in err_str or
+        "sign in to confirm you're not a bot" in err_str or
+        "confirm you're not a bot" in err_str or
+        "confirm you’re not a bot" in err_str or
+        "bot confirmation" in err_str or
+        "use --cookies" in err_str or
+        "this video is not available" in err_str or
+        "kullanılamıyor" in err_str or
+        "kullanilamiyor" in err_str or
+        "requested format is not available" in err_str or
+        "could not copy chrome cookie database" in err_str or
+        "could not find firefox cookies" in err_str or
+        "failed to decrypt with dpapi" in err_str or
+        "could not decrypt" in err_str or
+        "database is locked" in err_str or
+        ("could not find" in err_str and "cookie" in err_str) or
+        ("could not extract" in err_str and "cookie" in err_str) or
+        ("browser" in err_str and "not found" in err_str)
+    )
+
+
+def parse_media_query_args(
+    query: str,
+    default_browser: Optional[str] = None,
+    default_cookie_path: Optional[str] = None,
+) -> Tuple[str, Optional[str], Optional[str]]:
+    """
+    Sorgu metninden veya URL'den opsiyonel yt-dlp argümanlarını ayrıştırır:
+    - --cookies-from-browser <tarayıcı> veya --browser <tarayıcı>
+    - --cookies <dosya_yolu> veya --cookie-file <dosya_yolu>
+
+    Örnekler:
+    - "Tarkan Kuzu Kuzu --cookies-from-browser chrome" -> ("Tarkan Kuzu Kuzu", "chrome", None)
+    - "https://youtube.com/watch?v=... --cookies /path/cookies.txt" -> ("https://...", None, "/path/cookies.txt")
+    """
+    if not query or not isinstance(query, str):
+        return "", default_browser, default_cookie_path
+
+    browser = default_browser
+    cookie_path = default_cookie_path
+    clean_query = query.strip()
+
+    import re
+
+    # 1. --cookies-from-browser <browser> veya --browser <browser>
+    browser_match = re.search(r'(?:--cookies-from-browser|--browser)(?:=|\s+)(["\']?[a-zA-Z0-9_-]+["\']?)', clean_query, re.IGNORECASE)
+    if browser_match:
+        extracted_browser = browser_match.group(1).strip().strip("'\"").lower()
+        if extracted_browser in SUPPORTED_BROWSERS:
+            browser = extracted_browser
+        clean_query = re.sub(r'(?:--cookies-from-browser|--browser)(?:=|\s+)(["\']?[a-zA-Z0-9_-]+["\']?)', '', clean_query, flags=re.IGNORECASE).strip()
+
+    # 2. --cookies <path> veya --cookie-file <path>
+    cookie_match = re.search(r'(?:--cookies|--cookie-file)(?:=|\s+)(["\']?[^\s"\']+["\']?)', clean_query, re.IGNORECASE)
+    if cookie_match:
+        extracted_cookie = cookie_match.group(1).strip().strip("'\"")
+        if extracted_cookie:
+            cookie_path = extracted_cookie
+        clean_query = re.sub(r'(?:--cookies|--cookie-file)(?:=|\s+)(["\']?[^\s"\']+["\']?)', '', clean_query, flags=re.IGNORECASE).strip()
+
+    return clean_query, browser, cookie_path
+
+
+def get_cookie_file_path(warn_if_missing: bool = False, custom_path: Optional[str] = None) -> Optional[str]:
     """
     YouTube çerez dosyasının (cookies.txt) yolunu tespit eder.
     Öncelik sırası:
+    0. Fonksiyona doğrudan parametre olarak verilen custom_path
     1. YOUTUBE_COOKIE_FILE veya COOKIES_FILE ortam değişkenleri / config
     2. /app/cookies.txt (Docker ortamı)
     3. Proje ana dizinindeki cookies.txt
     4. Çalışma dizinindeki (CWD) cookies.txt
-
-    Dosya bulunamazsa uyarı loglar ve None döner (hata fırlatmaz, bot çalışmaya devam eder).
     """
     global _missing_cookie_warned
     candidates = []
 
+    if custom_path and str(custom_path).strip():
+        candidates.append(str(custom_path).strip().strip("'\""))
+
     # Ortam değişkenleri ve config
-    for env_var in ["YOUTUBE_COOKIE_FILE", "COOKIES_FILE_PATH", "COOKIE_FILE", "YOUTUBE_COOKIE_PATH"]:
+    for env_var in ["YOUTUBE_COOKIE_FILE", "COOKIES_FILE_PATH", "COOKIE_FILE", "YOUTUBE_COOKIE_PATH", "COOKIES_FILE"]:
         val = os.getenv(env_var)
         if val and val.strip():
             clean_val = val.strip().strip("'\"")
@@ -70,7 +169,7 @@ def get_cookie_file_path(warn_if_missing: bool = False) -> Optional[str]:
     if warn_if_missing and not _missing_cookie_warned:
         logger.warning(
             "⚠️ YouTube çerez dosyası (/app/cookies.txt veya cookies.txt) bulunamadı! "
-            "Bot doğrulaması (Sign in to confirm you're not a bot) nedeniyle bazı videolar çalışmayabilir."
+            "Sunucu ortamında otomatik bypass stratejileri devreye alınacaktır."
         )
         _missing_cookie_warned = True
 
@@ -97,16 +196,11 @@ def validate_cookie_file(cookie_path: Optional[str] = None) -> Tuple[bool, str]:
         now = time.time()
         total_cookies = 0
         expired_count = 0
-        has_netscape_header = False
 
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            for line_idx, line in enumerate(f):
+            for line in f:
                 line = line.strip()
-                if not line:
-                    continue
-                if line.startswith("#"):
-                    if "Netscape" in line or "cookie" in line.lower():
-                        has_netscape_header = True
+                if not line or line.startswith("#"):
                     continue
 
                 parts = line.split("\t")
@@ -122,7 +216,6 @@ def validate_cookie_file(cookie_path: Optional[str] = None) -> Tuple[bool, str]:
         if total_cookies == 0:
             return False, f"Çerez dosyasında geçerli çerez bulunamadı: {os.path.basename(path)}"
 
-        # Eğer çerezlerin tamamı eskiyse geçersiz say
         if expired_count >= total_cookies:
             return False, f"Çerezlerin tümünün süresi dolmuş ({expired_count}/{total_cookies})."
 
@@ -137,13 +230,25 @@ def is_user_cookie_valid(cookie_path: Optional[str] = None) -> bool:
     return valid
 
 
-def get_browser_cookie_config() -> Optional[str]:
-    """Yapılandırılmış ve desteklenen tarayıcı adını döndürür."""
-    if not YOUTUBE_COOKIES_FROM_BROWSER:
+def get_browser_cookie_config(custom_browser: Optional[str] = None) -> Optional[str]:
+    """
+    Yapılandırılmış veya parametreyle verilen desteklenen tarayıcı adını döndürür.
+    (chrome, firefox, edge, opera, brave, vivaldi, whale, safari, chromium)
+    """
+    candidate = (
+        custom_browser
+        or YOUTUBE_COOKIES_FROM_BROWSER
+        or os.getenv("YOUTUBE_COOKIES_FROM_BROWSER")
+        or os.getenv("COOKIES_FROM_BROWSER")
+        or os.getenv("BROWSER_COOKIES")
+    )
+    if not candidate:
         return None
-    browser = YOUTUBE_COOKIES_FROM_BROWSER.strip().lower()
+
+    browser = str(candidate).strip().strip("'\"").lower()
     if browser in SUPPORTED_BROWSERS:
         return browser
+
     logger.warning(
         f"⚠️ Desteklenmeyen tarayıcı adı belirtildi: '{browser}'. "
         f"Desteklenenler: {', '.join(sorted(SUPPORTED_BROWSERS))}"
@@ -151,12 +256,139 @@ def get_browser_cookie_config() -> Optional[str]:
     return None
 
 
+def get_auth_strategies(
+    custom_cookie_path: Optional[str] = None,
+    custom_browser: Optional[str] = None,
+) -> list:
+    """
+    YouTube işlemleri için öncelik sırasına göre çok aşamalı fallback zinciri oluşturur:
+    1. Tarayıcı Çerezleri (--cookies-from-browser: chrome, firefox vb.)
+    2. Dışarıdan Verilen veya Yapılandırılan cookies.txt Dosyası
+    3. Otomatik Üretilen Misafir Çerezleri (guest_cookies.txt)
+    4. Sunucu / Headless Bypass 1: TV + Android İstemcileri + User-Agent Rotasyonu + EJS
+    5. Sunucu / Headless Bypass 2: iOS + Android İstemcileri + User-Agent Rotasyonu + EJS
+    6. Sunucu / Headless Bypass 3: Temiz Çerezsiz EJS Oturumu + User-Agent Rotasyonu
+    """
+    import random
+    strategies = []
+
+    # 1. Aşama: Tarayıcı Çerezleri (--cookies-from-browser)
+    browser = get_browser_cookie_config(custom_browser)
+    if browser:
+        strategies.append({
+            "type": "browser",
+            "browser": browser,
+            "cookiesfrombrowser": (browser,),
+            "user_agent": random.choice(USER_AGENTS),
+            "label": f"Tarayıcı Çerezleri ({browser})",
+        })
+
+    # 2. Aşama: Dışarıdan Verilen veya Yapılandırılan cookies.txt Dosyası
+    cookie_path = get_cookie_file_path(warn_if_missing=False, custom_path=custom_cookie_path)
+    if cookie_path and os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 10:
+        strategies.append({
+            "type": "cookiefile",
+            "cookiefile": cookie_path,
+            "user_agent": random.choice(USER_AGENTS),
+            "label": f"Çerez Dosyası ({os.path.basename(cookie_path)})",
+        })
+
+    # 3. Aşama: Otomatik Misafir Çerezleri
+    if os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 10:
+        strategies.append({
+            "type": "cookiefile",
+            "cookiefile": GUEST_COOKIES_FILE,
+            "user_agent": random.choice(USER_AGENTS),
+            "label": "Misafir Çerezleri",
+        })
+
+    # 4. Aşama: Sunucu / Headless Bypass 1 (TV + Android İstemcisi)
+    strategies.append({
+        "type": "headless_bypass",
+        "player_client": ["tv", "android"],
+        "user_agent": random.choice(USER_AGENTS),
+        "label": "TV/Android İstemci Rotasyonu (Headless Bypass)",
+    })
+
+    # 5. Aşama: Sunucu / Headless Bypass 2 (iOS + Android İstemcisi)
+    strategies.append({
+        "type": "headless_bypass",
+        "player_client": ["ios", "android"],
+        "user_agent": random.choice(USER_AGENTS),
+        "label": "iOS/Android İstemci Rotasyonu (Headless Bypass)",
+    })
+
+    # 6. Aşama: Temiz Çerezsiz EJS Oturumu
+    strategies.append({
+        "type": "none",
+        "user_agent": random.choice(USER_AGENTS),
+        "label": "Standart Çerezsiz EJS Oturumu",
+    })
+
+    return strategies
+
+
+def build_ytdl_options(strategy: Optional[dict] = None, extra_opts: Optional[dict] = None) -> dict:
+    """
+    Stratejiye ve rotasyon havuzuna göre yt-dlp için hazır yapılandırma sözlüğü üretir.
+    """
+    strategy = strategy or {}
+    ua = strategy.get("user_agent") or USER_AGENTS[0]
+
+    opts: Dict[str, Any] = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "geo_bypass": True,
+        "nocheckcertificate": True,
+        "socket_timeout": 25,
+        "retries": 3,
+        "fragment_retries": 3,
+        "skip_unavailable_fragments": True,
+        "no_color": True,
+        "remote_components": ["ejs:github"],
+        "http_headers": {
+            "User-Agent": ua,
+            "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+        },
+    }
+
+    # 1. Tarayıcı Çerezi
+    if strategy.get("type") == "browser" and strategy.get("cookiesfrombrowser"):
+        opts["cookiesfrombrowser"] = strategy["cookiesfrombrowser"]
+    # 2. Dosya Çerezi
+    elif strategy.get("type") == "cookiefile" and strategy.get("cookiefile"):
+        opts["cookiefile"] = strategy["cookiefile"]
+    # 3. Alternatif İstemci Rotasyonu
+    elif strategy.get("type") == "headless_bypass" and strategy.get("player_client"):
+        opts["extractor_args"] = {
+            "youtube": {
+                "player_client": strategy["player_client"],
+            }
+        }
+
+    if extra_opts:
+        opts.update(extra_opts)
+
+    return opts
+
+
 def get_youtube_auth_status() -> Dict[str, Any]:
     """
     YouTube kimlik doğrulama öncelik zincirini değerlendirir ve durum özeti verir.
     Kesinlikle hassas çerez verisi içermez.
     """
-    # 1. Öncelik: Cookie File
+    # 1. Öncelik: Tarayıcı Çerezleri
+    browser = get_browser_cookie_config()
+    if browser:
+        return {
+            "type": "browser",
+            "ready": True,
+            "detail": f"Browser cookies configured ({browser})",
+            "browser": browser,
+        }
+
+    # 2. Öncelik: Cookie File
     target_file = get_cookie_file_path()
     if target_file and os.path.exists(target_file):
         is_valid, reason = validate_cookie_file(target_file)
@@ -170,21 +402,11 @@ def get_youtube_auth_status() -> Dict[str, Any]:
         else:
             logger.warning(f"⚠️ YouTube cookie authentication uyarısı: {reason}")
 
-    # 2. Öncelik: Browser Cookies
-    browser = get_browser_cookie_config()
-    if browser:
-        return {
-            "type": "browser",
-            "ready": True,
-            "detail": f"Browser cookies configured ({browser})",
-            "browser": browser,
-        }
-
-    # 3. Anonim / Çerezsiz
+    # 3. Headless EJS Bypass Modu
     return {
-        "type": "none",
-        "ready": False,
-        "detail": "No cookie authentication configured",
+        "type": "headless_bypass",
+        "ready": True,
+        "detail": "Headless EJS & Multi-Client bypass active",
     }
 
 

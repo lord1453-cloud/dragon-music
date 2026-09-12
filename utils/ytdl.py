@@ -81,26 +81,16 @@ from utils.cookie_manager import (
     get_youtube_auth_status,
     get_cookie_file_path,
     GUEST_COOKIES_FILE,
+    get_auth_strategies,
+    build_ytdl_options,
+    is_bot_challenge_error,
+    parse_media_query_args,
 )
 
 # ── 3. YouTube Kimlik Doğrulama & Çerez Öncelik Zinciri ────────
 def _is_bot_challenge(err_msg: Any) -> bool:
     """yt-dlp veya YouTube hata mesajının bot kontrolü olup olmadığını tespit eder (TR ve EN)."""
-    err_str = str(err_msg).lower()
-    return (
-        "bot olmadığınızı" in err_str or
-        "oturum açın" in err_str or
-        "topluluğumuzu korumamıza yardımcı olur" in err_str or
-        "daha fazla bilgi" in err_str or
-        "sign in to confirm you're not a bot" in err_str or
-        "confirm you're not a bot" in err_str or
-        "confirm you’re not a bot" in err_str or
-        "bot confirmation" in err_str or
-        "use --cookies" in err_str or
-        "this video is not available" in err_str or
-        "kullanılamıyor" in err_str or
-        "kullanilamiyor" in err_str
-    )
+    return is_bot_challenge_error(err_msg)
 
 
 def _classify_error(err_str: str) -> Exception:
@@ -115,59 +105,17 @@ def _classify_error(err_str: str) -> Exception:
     return YTDLError(err_str)
 
 
-def _get_auth_strategies() -> list:
+def _get_auth_strategies(custom_cookie_path: Optional[str] = None, custom_browser: Optional[str] = None) -> list:
     """
-    YouTube işlemleri için öncelik sırasına göre kimlik doğrulama stratejilerini üretir:
-    1. get_cookie_file_path() ile bulunan cookies.txt (veya /app/cookies.txt)
-    2. GUEST_COOKIES_FILE varsa ve geçerliyse
-    3. YOUTUBE_COOKIES_FROM_BROWSER yapılandırılmışsa (chrome, edge, firefox vb.)
-    4. Standart / Çerezsiz deneme
+    YouTube işlemleri için öncelik sırasına göre çok aşamalı fallback zincirini üretir:
+    1. Tarayıcı Çerezleri (--cookies-from-browser: chrome, firefox vb.)
+    2. Dışarıdan Verilen veya Yapılandırılan cookies.txt Dosyası
+    3. Otomatik Üretilen Misafir Çerezleri (guest_cookies.txt)
+    4. Sunucu / Headless Bypass 1 (TV + Android)
+    5. Sunucu / Headless Bypass 2 (iOS + Android)
+    6. Sunucu / Headless Bypass 3 (Temiz Çerezsiz EJS)
     """
-    strategies = []
-
-    # 1. Öncelik: Cookie File
-    cookie_path = get_cookie_file_path(warn_if_missing=True)
-    if cookie_path and os.path.exists(cookie_path):
-        is_valid, reason = validate_cookie_file(cookie_path)
-        if is_valid:
-            strategies.append({
-                "type": "cookiefile",
-                "cookiefile": cookie_path,
-                "label": f"Cookie File ({os.path.basename(cookie_path)})",
-            })
-        else:
-            logger.warning(f"⚠️ YouTube cookie doğrulaması uyarısı: {reason}, yine de deneniyor...")
-            strategies.append({
-                "type": "cookiefile",
-                "cookiefile": cookie_path,
-                "label": f"Cookie File ({os.path.basename(cookie_path)})",
-            })
-
-    # 2. Öncelik: Misafir Çerezleri (GUEST_COOKIES_FILE)
-    if os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 10:
-        strategies.append({
-            "type": "cookiefile",
-            "cookiefile": GUEST_COOKIES_FILE,
-            "label": "Guest Cookie File",
-        })
-
-    # 3. Öncelik: Tarayıcı Çerezleri (cookiesfrombrowser)
-    browser = get_browser_cookie_config()
-    if browser:
-        strategies.append({
-            "type": "browser",
-            "browser": browser,
-            "cookiesfrombrowser": (browser,),
-            "label": f"Browser Cookies ({browser})",
-        })
-
-    # 4. Öncelik: Standart / Çerezsiz EJS İstek
-    strategies.append({
-        "type": "none",
-        "label": "Standart (Çerezsiz EJS)",
-    })
-
-    return strategies
+    return get_auth_strategies(custom_cookie_path=custom_cookie_path, custom_browser=custom_browser)
 
 
 def check_cookies_status(cookie_path: Optional[str] = None) -> bool:
@@ -176,48 +124,17 @@ def check_cookies_status(cookie_path: Optional[str] = None) -> bool:
 
 
 # ── 4. Temel yt-dlp Yapılandırması ─────────────────────────────
-def _get_base_opts(strategy: Optional[dict] = None) -> dict:
+def _get_base_opts(strategy: Optional[dict] = None, extra_opts: Optional[dict] = None) -> dict:
     """
-    yt-dlp için optimize edilmiş temel yapılandırma.
-    Aşırı yüklenmeyi, uzun asılı kalmaları ve gereksiz veri transferini önler.
-    Çerez içeriklerini ASLA loglamaz.
-    EJS Challenge Solver desteklidir.
+    yt-dlp için EJS challenge solver ve User-Agent rotasyonu destekli optimize edilmiş temel yapılandırma.
     """
-    opts: Dict[str, Any] = {
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        "geo_bypass": True,
-        "nocheckcertificate": True,
-        "socket_timeout": 20,
-        "retries": 3,
-        "fragment_retries": 3,
-        "skip_unavailable_fragments": True,
-        "ignoreerrors": False,
-        "no_color": True,
-        "remote_components": ["ejs:github"],
+    base_extra = {
         "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
-        "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/128.0.0.0 Safari/537.36"
-            ),
-            "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        },
+        "socket_timeout": 20,
     }
-
-    if strategy:
-        if strategy.get("type") == "cookiefile" and strategy.get("cookiefile"):
-            opts["cookiefile"] = strategy["cookiefile"]
-        elif strategy.get("type") == "browser" and strategy.get("cookiesfrombrowser"):
-            opts["cookiesfrombrowser"] = strategy["cookiesfrombrowser"]
-    else:
-        cfile = get_cookie_file_path(warn_if_missing=False)
-        if cfile:
-            opts["cookiefile"] = cfile
-
-    return opts
+    if extra_opts:
+        base_extra.update(extra_opts)
+    return build_ytdl_options(strategy=strategy, extra_opts=base_extra)
 
 
 def _format_duration(seconds: Optional[int]) -> str:
@@ -241,44 +158,50 @@ def _is_valid_file(path: str) -> bool:
 
 
 # ── 5. YouTube Arama Fonksiyonu ────────────────────────────────
-async def search_youtube(query: str) -> Optional[dict]:
+async def search_youtube(
+    query: str,
+    cookie_path: Optional[str] = None,
+    browser: Optional[str] = None,
+) -> Optional[dict]:
     """
     YouTube'da şarkı/video arar.
     - Eğer girdi URL ise doğrudan kullanır.
     - Metin araması ise 'ytsearch:1:sorgu' formatında ilk sonucu çeker.
     - Önce bellekteki TTL önbelleği kontrol eder.
-    - Geçici hatalarda üstel geri çekilme (exponential backoff) uygular.
+    - Çoklu kimlik doğrulama stratejisi ve fallback mekanizması içerir.
     - YouTube başarısız olursa alternatif SoundCloud araması yapar.
     """
-    query = query.strip()
-    if not query:
+    clean_query, parsed_browser, parsed_cookie_path = parse_media_query_args(
+        query, default_browser=browser, default_cookie_path=cookie_path
+    )
+    if not clean_query:
         return None
 
     # 1. Önbellek kontrolü
-    cache_key = f"search:{query.lower()}"
+    cache_key = f"search:{clean_query.lower()}"
     cached = await _search_cache.get(cache_key)
     if cached:
-        logger.debug(f"⚡ Önbellekten arama sonucu getirildi: {query}")
+        logger.debug(f"⚡ Önbellekten arama sonucu getirildi: {clean_query}")
         return cached
 
-    is_direct_url = query.startswith(("http://", "https://"))
+    is_direct_url = clean_query.startswith(("http://", "https://"))
     # Türkçe arama önceliği: URL değilse arama sonuna ' Türkçe' ekle
     if is_direct_url:
-        target = query
+        target = clean_query
     else:
-        q_lower = query.lower()
+        q_lower = clean_query.lower()
         if not any(k in q_lower for k in ["türkçe", "turkce", "turkish"]):
-            target = f"ytsearch:1:{query} Türkçe"
+            target = f"ytsearch:1:{clean_query} Türkçe"
         else:
-            target = f"ytsearch:1:{query}"
+            target = f"ytsearch:1:{clean_query}"
 
     def _sync_search() -> Optional[dict]:
-        strategies = _get_auth_strategies()
+        strategies = _get_auth_strategies(custom_cookie_path=parsed_cookie_path, custom_browser=parsed_browser)
         bot_challenge_detected = False
 
         search_targets = [target]
-        if not is_direct_url and target != f"ytsearch:1:{query}":
-            search_targets.append(f"ytsearch:1:{query}")
+        if not is_direct_url and target != f"ytsearch:1:{clean_query}":
+            search_targets.append(f"ytsearch:1:{clean_query}")
 
         for current_target in search_targets:
             for strategy in strategies:
@@ -305,7 +228,7 @@ async def search_youtube(query: str) -> Optional[dict]:
 
                         entry = entries[0]
                         vid = entry.get("id", "")
-                        title = entry.get("title") or query
+                        title = entry.get("title") or clean_query
                         web_url = entry.get("url") or entry.get("webpage_url")
                         if not web_url or not str(web_url).startswith("http"):
                             web_url = f"https://www.youtube.com/watch?v={vid}"
@@ -323,13 +246,12 @@ async def search_youtube(query: str) -> Optional[dict]:
                     err_text = str(e)
                     if _is_bot_challenge(err_text):
                         bot_challenge_detected = True
-                        logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                        logger.warning(f"⚠️ YouTube bot doğrulaması/erişim engeli ({strat_label}), sonraki deneniyor...")
                     elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
-                        logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
+                        logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}), sonraki deneniyor...")
                     else:
                         logger.warning(f"YouTube arama uyarısı ({strat_label}): {err_text.splitlines()[0]}")
                     continue
-
 
         if bot_challenge_detected:
             logger.warning("⚠️ YouTube bot doğrulaması nedeniyle arama tamamlanamadı.")
@@ -346,7 +268,7 @@ async def search_youtube(query: str) -> Optional[dict]:
 
     # 2. YouTube araması başarısız olursa SoundCloud Fallback
     if not is_direct_url:
-        logger.info(f"🔄 YouTube akışı engellendi/hata verdi, SoundCloud yedeği devreye giriyor: {query}")
+        logger.info(f"🔄 YouTube akışı engellendi/hata verdi, SoundCloud yedeği devreye giriyor: {clean_query}")
         sc_opts = {
             **_get_base_opts(),
             "extract_flat": "in_playlist",
@@ -355,12 +277,12 @@ async def search_youtube(query: str) -> Optional[dict]:
         def _sync_sc_search() -> Optional[dict]:
             try:
                 with yt_dlp.YoutubeDL(sc_opts) as ydl:
-                    info = ydl.extract_info(f"scsearch1:{query}", download=False)
+                    info = ydl.extract_info(f"scsearch1:{clean_query}", download=False)
                     if info and "entries" in info and info["entries"]:
                         entry = info["entries"][0]
                         if entry:
                             return {
-                                "title": entry.get("title") or query,
+                                "title": entry.get("title") or clean_query,
                                 "url": entry.get("url") or entry.get("webpage_url"),
                                 "duration": entry.get("duration") or 0,
                                 "duration_str": _format_duration(entry.get("duration")),
@@ -379,7 +301,11 @@ async def search_youtube(query: str) -> Optional[dict]:
 
 
 # ── 6. Hızlandırılmış Stream / Audio URL Alma Fonksiyonu ────────
-async def get_audio_url(query: str) -> Optional[str]:
+async def get_audio_url(
+    query: str,
+    cookie_path: Optional[str] = None,
+    browser: Optional[str] = None,
+) -> Optional[str]:
     """
     Verilen şarkı adı veya doğrudan YouTube/medya linki için
     hızlandırılmış doğrudan ses akışı URL'sini alır.
@@ -390,30 +316,32 @@ async def get_audio_url(query: str) -> Optional[str]:
     - Önbellek (TTL Cache) süresi: 3600 saniye (1 saat).
     - Asenkron executor (run_in_executor) ile paralel ve donmayan işlemler.
     """
-    query = query.strip()
-    if not query:
+    clean_query, parsed_browser, parsed_cookie_path = parse_media_query_args(
+        query, default_browser=browser, default_cookie_path=cookie_path
+    )
+    if not clean_query:
         return None
 
     # 1. TTL Önbellek Kontrolü (TTL = 3600 saniye)
-    cache_key = f"audio_url:{query.lower()}"
+    cache_key = f"audio_url:{clean_query.lower()}"
     cached = await _search_cache.get(cache_key)
     if cached:
-        logger.debug(f"⚡ Önbellekten ses URL'si getirildi (Cache HIT): {query}")
+        logger.debug(f"⚡ Önbellekten ses URL'si getirildi (Cache HIT): {clean_query}")
         return cached
 
     # 2. URL veya Arama Sorgusu Tespiti & Türkçe Önceliklendirme
-    is_direct_url = query.startswith(("http://", "https://"))
+    is_direct_url = clean_query.startswith(("http://", "https://"))
     if is_direct_url:
-        target = query
+        target = clean_query
     else:
-        q_lower = query.lower()
+        q_lower = clean_query.lower()
         if not any(k in q_lower for k in ["türkçe", "turkce", "turkish"]):
-            target = f"ytsearch:1:{query} Türkçe"
+            target = f"ytsearch:1:{clean_query} Türkçe"
         else:
-            target = f"ytsearch:1:{query}"
+            target = f"ytsearch:1:{clean_query}"
 
     def _sync_get_audio_url() -> Optional[str]:
-        strategies = _get_auth_strategies()
+        strategies = _get_auth_strategies(custom_cookie_path=parsed_cookie_path, custom_browser=parsed_browser)
         bot_challenge_encountered = False
 
         audio_format_candidates = [
@@ -424,8 +352,8 @@ async def get_audio_url(query: str) -> Optional[str]:
         ]
 
         search_targets = [target]
-        if not is_direct_url and target != f"ytsearch:1:{query}":
-            search_targets.append(f"ytsearch:1:{query}")
+        if not is_direct_url and target != f"ytsearch:1:{clean_query}":
+            search_targets.append(f"ytsearch:1:{clean_query}")
 
         for current_target in search_targets:
             for strategy in strategies:
@@ -452,10 +380,9 @@ async def get_audio_url(query: str) -> Optional[str]:
                             if not entries:
                                 continue
 
-
                         entry = entries[0]
                         direct_url = entry.get("url")
-                        video_title = entry.get("title") or query
+                        video_title = entry.get("title") or clean_query
                         if direct_url and str(direct_url).startswith("http"):
                             logger.info(f"🎵 YouTube: {video_title}")
                             logger.info("🔐 YouTube authentication hazır")
@@ -488,15 +415,14 @@ async def get_audio_url(query: str) -> Optional[str]:
                         err_text = str(e)
                         if _is_bot_challenge(err_text):
                             bot_challenge_encountered = True
-                            logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                            logger.warning(f"⚠️ YouTube bot doğrulaması/erişim engeli ({strat_label}), sonraki format/strateji deneniyor...")
                             break
                         elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
-                            logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
+                            logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}), sonraki strateji deneniyor...")
                             break
                         else:
                             logger.debug(f"get_audio_url ({strat_label}/{afmt}) uyarısı: {err_text.splitlines()[0]}")
                             continue
-
 
         if bot_challenge_encountered:
             logger.warning("⚠️ YouTube bot doğrulaması nedeniyle ses akışı alınamadı.")
@@ -506,7 +432,7 @@ async def get_audio_url(query: str) -> Optional[str]:
 
         # SoundCloud failover yedeği
         if not is_direct_url:
-            logger.info(f"🔄 SoundCloud fallback devreye giriyor: {query}")
+            logger.info(f"🔄 SoundCloud fallback devreye giriyor: {clean_query}")
             try:
                 sc_opts = {
                     **_get_base_opts(),
@@ -514,11 +440,11 @@ async def get_audio_url(query: str) -> Optional[str]:
                     "skip_download": True,
                 }
                 with yt_dlp.YoutubeDL(sc_opts) as ydl:
-                    info = ydl.extract_info(f"scsearch1:{query}", download=False)
+                    info = ydl.extract_info(f"scsearch1:{clean_query}", download=False)
                     if info and "entries" in info and info["entries"]:
                         entry = info["entries"][0]
                         if entry and entry.get("url"):
-                            logger.info(f"✅ SoundCloud fallback üzerinden ses akışı sağlandı: {entry.get('title') or query}")
+                            logger.info(f"✅ SoundCloud fallback üzerinden ses akışı sağlandı: {entry.get('title') or clean_query}")
                             return entry.get("url")
             except Exception as sc_err:
                 logger.error(f"get_audio_url SoundCloud yedeği hatası: {sc_err}")
@@ -543,15 +469,24 @@ async def get_stream_url(url: str) -> Optional[str]:
 
 
 # ── 7. MP3 Olarak İndirme Fonksiyonu (/indir için) ───────────────
-async def download_audio(query: Optional[str] = None, info: Optional[dict] = None) -> Optional[dict]:
+async def download_audio(
+    query: Optional[str] = None,
+    info: Optional[dict] = None,
+    cookie_path: Optional[str] = None,
+    browser: Optional[str] = None,
+) -> Optional[dict]:
     """
     Şarkıyı Telegram'a göndermek üzere MP3 olarak indirir.
     Eğer 'info' önceden aranıp verilmişse tekrar arama yapmaz.
+    --cookies-from-browser ve harici cookies.txt desteği içerir.
     """
+    clean_query, parsed_browser, parsed_cookie_path = parse_media_query_args(
+        query or "", default_browser=browser, default_cookie_path=cookie_path
+    )
     if not info:
-        if not query:
+        if not clean_query:
             return None
-        info = await search_youtube(query)
+        info = await search_youtube(clean_query, cookie_path=parsed_cookie_path, browser=parsed_browser)
         if not info:
             return None
 
@@ -570,7 +505,7 @@ async def download_audio(query: Optional[str] = None, info: Optional[dict] = Non
         }
 
     def _sync_download():
-        strategies = _get_auth_strategies()
+        strategies = _get_auth_strategies(custom_cookie_path=parsed_cookie_path, custom_browser=parsed_browser)
         bot_challenge_encountered = False
 
         for strategy in strategies:
@@ -607,9 +542,9 @@ async def download_audio(query: Optional[str] = None, info: Optional[dict] = Non
                 err_text = str(e)
                 if _is_bot_challenge(err_text):
                     bot_challenge_encountered = True
-                    logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                    logger.warning(f"⚠️ YouTube bot doğrulaması/erişim engeli ({strat_label}), sonraki deneniyor...")
                 elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
-                    logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
+                    logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}), sonraki deneniyor...")
                 else:
                     logger.warning(f"MP3 indirme uyarısı ({strat_label}): {err_text.splitlines()[0]}")
                 continue
@@ -657,15 +592,24 @@ async def download_audio(query: Optional[str] = None, info: Optional[dict] = Non
 
 
 # ── 8. Sesli Sohbet Yayını İçin Ses Dosyası İndirme ──────────────
-async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Optional[str]:
+async def get_audio_file_for_stream(
+    url: str,
+    title: Optional[str] = None,
+    cookie_path: Optional[str] = None,
+    browser: Optional[str] = None,
+) -> Optional[str]:
     """
     Sesli sohbette çalmak için parçayı optimize edilmiş Opus/OGG formatında hazırlar.
     - Önbellek kontrolü yapar.
     - In-flight deduplication ile aynı URL için çift indirmeyi engeller.
     - Semaphore ile eşzamanlı indirme patlamalarını önler.
+    - Çoklu kimlik doğrulama fallback zincirini destekler.
     - Hata durumunda kontrollü failover (SoundCloud) motoruna geçer.
     """
-    file_hash = abs(hash(url)) & 0xFFFFFFFF
+    clean_url, parsed_browser, parsed_cookie_path = parse_media_query_args(
+        url, default_browser=browser, default_cookie_path=cookie_path
+    )
+    file_hash = abs(hash(clean_url)) & 0xFFFFFFFF
     output_template = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.%(ext)s")
     final_path = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.opus")
     fallback_path = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}.ogg")
@@ -679,13 +623,13 @@ async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Op
 
     # 2. Eşzamanlı İndirme Tekilleştirme (In-Flight Dedup)
     async with _in_flight_lock:
-        if url in _in_flight_downloads:
-            logger.info(f"⏳ Aynı medya zaten indiriliyor, mevcut işlem bekleniyor: {url}")
-            existing_future = _in_flight_downloads[url]
+        if clean_url in _in_flight_downloads:
+            logger.info(f"⏳ Aynı medya zaten indiriliyor, mevcut işlem bekleniyor: {clean_url}")
+            existing_future = _in_flight_downloads[clean_url]
         else:
             loop = asyncio.get_running_loop()
             existing_future = loop.create_future()
-            _in_flight_downloads[url] = existing_future
+            _in_flight_downloads[clean_url] = existing_future
 
     if existing_future.done():
         try:
@@ -695,7 +639,7 @@ async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Op
 
     # Eğer biz ilk istek değilsek, ilk isteğin bitmesini bekle
     async with _in_flight_lock:
-        is_leader = (_in_flight_downloads.get(url) is existing_future and not existing_future.done() and not hasattr(existing_future, "_running_leader"))
+        is_leader = (_in_flight_downloads.get(clean_url) is existing_future and not existing_future.done() and not hasattr(existing_future, "_running_leader"))
         if is_leader:
             setattr(existing_future, "_running_leader", True)
 
@@ -716,7 +660,7 @@ async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Op
                     pass
 
         def _sync_worker():
-            strategies = _get_auth_strategies()
+            strategies = _get_auth_strategies(custom_cookie_path=parsed_cookie_path, custom_browser=parsed_browser)
             bot_challenge_encountered = False
 
             audio_formats = [
@@ -752,11 +696,11 @@ async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Op
                         current_opts = {**opts, "format": afmt}
                         with yt_dlp.YoutubeDL(current_opts) as ydl:
                             logger.debug(f"🔐 YouTube authentication deneniyor ({strat_label})...")
-                            ydl.download([url])
+                            ydl.download([clean_url])
 
                         for candidate in [final_path, fallback_path, mp3_path]:
                             if _is_valid_file(candidate):
-                                logger.info(f"🎵 YouTube: {title or url}")
+                                logger.info(f"🎵 YouTube: {title or clean_url}")
                                 logger.info("🔐 YouTube authentication hazır")
                                 logger.info("📥 Audio stream alınıyor...")
                                 logger.info(f"✅ YouTube audio stream başarılı: {candidate}")
@@ -765,7 +709,7 @@ async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Op
                         for ext in [".opus", ".ogg", ".mp3", ".m4a", ".webm"]:
                             candidate = os.path.join(DOWNLOADS_DIR, f"stream_{file_hash}{ext}")
                             if _is_valid_file(candidate):
-                                logger.info(f"🎵 YouTube: {title or url}")
+                                logger.info(f"🎵 YouTube: {title or clean_url}")
                                 logger.info("🔐 YouTube authentication hazır")
                                 logger.info("📥 Audio stream alınıyor...")
                                 logger.info(f"✅ YouTube audio stream başarılı: {candidate}")
@@ -774,17 +718,17 @@ async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Op
                         err_text = str(e)
                         if _is_bot_challenge(err_text):
                             bot_challenge_encountered = True
-                            logger.warning(f"⚠️ YouTube bot doğrulaması tespit edildi ({strat_label}).")
+                            logger.warning(f"⚠️ YouTube bot doğrulaması/erişim engeli ({strat_label}), sonraki format/strateji deneniyor...")
                             break
                         elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
-                            logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}).")
+                            logger.warning(f"⚠️ YouTube cookie authentication başarısız ({strat_label}), sonraki deneniyor...")
                             break
                         else:
                             logger.warning(f"YouTube ses akışı format ({afmt}) uyarısı ({strat_label}): {err_text.splitlines()[0]}")
                             continue
 
             # 2. SoundCloud Failover
-            search_query = title or (url.split("watch?v=")[-1] if "watch?v=" in url else url)
+            search_query = title or (clean_url.split("watch?v=")[-1] if "watch?v=" in clean_url else clean_url)
             if bot_challenge_encountered:
                 logger.warning("⚠️ YouTube bot doğrulaması nedeniyle ses akışı alınamadı.")
                 logger.info(f"🔄 SoundCloud fallback deneniyor: {search_query}")
@@ -838,18 +782,26 @@ async def get_audio_file_for_stream(url: str, title: Optional[str] = None) -> Op
             existing_future.set_exception(exc)
     finally:
         async with _in_flight_lock:
-            _in_flight_downloads.pop(url, None)
+            _in_flight_downloads.pop(clean_url, None)
 
     return result_path
 
 
 # ── 9. Görüntülü Yayın İçin Video Dosyası İndirme (720p HD) ────
-async def get_video_file_for_stream(url: str) -> Optional[str]:
+async def get_video_file_for_stream(
+    url: str,
+    cookie_path: Optional[str] = None,
+    browser: Optional[str] = None,
+) -> Optional[str]:
     """
     Görüntülü yayın (Video Stream) için videoyu maksimum 720p MP4 formatında indirir.
     PyTgCalls MediaStream video akışı için optimize edilmiştir.
+    --cookies-from-browser ve harici cookies.txt desteği içerir.
     """
-    file_hash = abs(hash(url)) & 0xFFFFFFFF
+    clean_url, parsed_browser, parsed_cookie_path = parse_media_query_args(
+        url, default_browser=browser, default_cookie_path=cookie_path
+    )
+    file_hash = abs(hash(clean_url)) & 0xFFFFFFFF
     output_template = os.path.join(DOWNLOADS_DIR, f"vstream_{file_hash}.%(ext)s")
     final_path = os.path.join(DOWNLOADS_DIR, f"vstream_{file_hash}.mp4")
 
@@ -860,7 +812,7 @@ async def get_video_file_for_stream(url: str) -> Optional[str]:
 
     # 2. In-flight kontrolü
     async with _in_flight_lock:
-        vkey = f"video:{url}"
+        vkey = f"video:{clean_url}"
         if vkey in _in_flight_downloads:
             existing_future = _in_flight_downloads[vkey]
         else:
@@ -893,7 +845,7 @@ async def get_video_file_for_stream(url: str) -> Optional[str]:
                 pass
 
         def _sync_vworker():
-            strategies = _get_auth_strategies()
+            strategies = _get_auth_strategies(custom_cookie_path=parsed_cookie_path, custom_browser=parsed_browser)
             vformats = [
                 "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best",
                 "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
@@ -922,7 +874,7 @@ async def get_video_file_for_stream(url: str) -> Optional[str]:
                     try:
                         current_opts = {**opts, "format": vfmt}
                         with yt_dlp.YoutubeDL(current_opts) as ydl:
-                            ydl.download([url])
+                            ydl.download([clean_url])
 
                         if _is_valid_file(final_path):
                             logger.info(f"✅ YouTube video akışı başarılı: {final_path}")
@@ -936,10 +888,10 @@ async def get_video_file_for_stream(url: str) -> Optional[str]:
                     except Exception as e:
                         err_text = str(e)
                         if _is_bot_challenge(err_text):
-                            logger.warning(f"⚠️ YouTube video bot doğrulaması tespit edildi ({strat_label}).")
+                            logger.warning(f"⚠️ YouTube video bot doğrulaması/erişim engeli ({strat_label}), sonraki deneniyor...")
                             break
                         elif "cookie" in err_text.lower() or "dpapi" in err_text.lower():
-                            logger.warning(f"⚠️ YouTube video cookie authentication hatası ({strat_label}).")
+                            logger.warning(f"⚠️ YouTube video cookie authentication hatası ({strat_label}), sonraki deneniyor...")
                             break
                         else:
                             logger.warning(f"Video format ({vfmt}) denenirken uyarı ({strat_label}): {err_text.splitlines()[0]}")
@@ -960,7 +912,7 @@ async def get_video_file_for_stream(url: str) -> Optional[str]:
             existing_future.set_exception(exc)
     finally:
         async with _in_flight_lock:
-            _in_flight_downloads.pop(f"video:{url}", None)
+            _in_flight_downloads.pop(f"video:{clean_url}", None)
 
     return result_path
 
