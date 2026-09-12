@@ -9,6 +9,7 @@ FROM python:3.11-slim
 # ── Sistem Bağımlılıkları ve X11 Kütüphaneleri ────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    nodejs \
     libx11-6 \
     libxext6 \
     libxrandr2 \

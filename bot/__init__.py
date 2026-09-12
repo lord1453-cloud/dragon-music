@@ -14,5 +14,6 @@ try:
     import pyrogram.utils
     pyrogram.utils.MIN_CHANNEL_ID = -1009999999999
     pyrogram.utils.MAX_CHANNEL_ID = -1000000000000
+    import utils.pyrogram_patch  # noqa: F401
 except Exception:
     pass

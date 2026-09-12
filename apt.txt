@@ -1,4 +1,5 @@
 ffmpeg
+nodejs
 libx11-6
 libxext6
 libxrandr2

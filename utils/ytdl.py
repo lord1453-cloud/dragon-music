@@ -85,14 +85,21 @@ from utils.cookie_manager import (
 
 # ── 3. YouTube Kimlik Doğrulama & Çerez Öncelik Zinciri ────────
 def _is_bot_challenge(err_msg: Any) -> bool:
-    """yt-dlp veya YouTube hata mesajının bot kontrolü olup olmadığını tespit eder."""
+    """yt-dlp veya YouTube hata mesajının bot kontrolü olup olmadığını tespit eder (TR ve EN)."""
     err_str = str(err_msg).lower()
     return (
+        "bot olmadığınızı" in err_str or
+        "oturum açın" in err_str or
+        "topluluğumuzu korumamıza yardımcı olur" in err_str or
+        "daha fazla bilgi" in err_str or
         "sign in to confirm you're not a bot" in err_str or
         "confirm you're not a bot" in err_str or
         "confirm you’re not a bot" in err_str or
         "bot confirmation" in err_str or
-        "use --cookies" in err_str
+        "use --cookies" in err_str or
+        "this video is not available" in err_str or
+        "kullanılamıyor" in err_str or
+        "kullanilamiyor" in err_str
     )
 
 
@@ -136,15 +143,15 @@ def _get_auth_strategies() -> list:
                 "label": f"Cookie File ({os.path.basename(cookie_path)})",
             })
 
-    # Misafir çerezi varsa ve kullanıcı çerezi yoksa
-    if not strategies and os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 10:
+    # 2. Öncelik: Misafir Çerezleri (GUEST_COOKIES_FILE)
+    if os.path.exists(GUEST_COOKIES_FILE) and os.path.getsize(GUEST_COOKIES_FILE) > 10:
         strategies.append({
             "type": "cookiefile",
             "cookiefile": GUEST_COOKIES_FILE,
             "label": "Guest Cookie File",
         })
 
-    # 2. Öncelik: Tarayıcı Çerezleri (cookiesfrombrowser)
+    # 3. Öncelik: Tarayıcı Çerezleri (cookiesfrombrowser)
     browser = get_browser_cookie_config()
     if browser:
         strategies.append({
@@ -154,10 +161,10 @@ def _get_auth_strategies() -> list:
             "label": f"Browser Cookies ({browser})",
         })
 
-    # 3. Öncelik: Standart Çerezsiz İstek
+    # 4. Öncelik: Standart / Çerezsiz EJS İstek
     strategies.append({
         "type": "none",
-        "label": "Standart (Çerezsiz)",
+        "label": "Standart (Çerezsiz EJS)",
     })
 
     return strategies
@@ -174,6 +181,7 @@ def _get_base_opts(strategy: Optional[dict] = None) -> dict:
     yt-dlp için optimize edilmiş temel yapılandırma.
     Aşırı yüklenmeyi, uzun asılı kalmaları ve gereksiz veri transferini önler.
     Çerez içeriklerini ASLA loglamaz.
+    EJS Challenge Solver desteklidir.
     """
     opts: Dict[str, Any] = {
         "quiet": True,
@@ -181,12 +189,13 @@ def _get_base_opts(strategy: Optional[dict] = None) -> dict:
         "noplaylist": True,
         "geo_bypass": True,
         "nocheckcertificate": True,
-        "socket_timeout": 15,
+        "socket_timeout": 20,
         "retries": 3,
         "fragment_retries": 3,
         "skip_unavailable_fragments": True,
         "ignoreerrors": False,
         "no_color": True,
+        "remote_components": ["ejs:github"],
         "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
         "http_headers": {
             "User-Agent": (
@@ -195,14 +204,6 @@ def _get_base_opts(strategy: Optional[dict] = None) -> dict:
                 "Chrome/128.0.0.0 Safari/537.36"
             ),
             "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        },
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "web", "tv"],
-                "player_skip": ["configs", "webpage"],
-                "skip": ["dash", "hls"],
-                "lang": ["tr"],
-            }
         },
     }
 

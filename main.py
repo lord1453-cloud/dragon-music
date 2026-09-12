@@ -51,6 +51,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("EjderhaBot")
 
+# ── Pyrogram 500 RPC_CALL_FAIL ve Donma Önleyici Yama ───────
+import utils.pyrogram_patch  # noqa: F401
+
 from pyrogram import idle
 from bot.clients import bot_client, user_client, call_client
 

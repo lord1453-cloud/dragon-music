@@ -1,6 +1,7 @@
 [phases.setup]
 nixPkgs = [
     "python311",
+    "nodejs",
     "ffmpeg",
     "xorg.libX11",
     "xorg.libXext",
@@ -11,6 +12,7 @@ nixPkgs = [
     "alsa-lib"
 ]
 aptPkgs = [
+    "nodejs",
     "libx11-6",
     "libxext6",
     "libxrandr2",

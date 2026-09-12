@@ -11,6 +11,7 @@ from typing import Optional, Tuple
 from pyrogram import Client, filters
 from pyrogram.types import Message, ChatPermissions, ChatPrivileges
 from pyrogram.enums import ChatMemberStatus, ChatType
+from pyrogram.errors import RPCError
 
 from utils.decorators import admin_only, clean_command, get_user_display_name, get_user_id
 
@@ -198,10 +199,25 @@ async def kickme_command(client: Client, message: Message):
     user_name = get_user_display_name(message)
 
     try:
+        # Önce botun kendi yetkisini kontrol et
+        bot_member = await client.get_chat_member(message.chat.id, "me")
+        if bot_member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+            await message.reply_text("❌ Bu komutu kullanabilmem için grupta yönetici olmam gerekiyor!")
+            return
+        if bot_member.privileges and not bot_member.privileges.can_restrict_members:
+            await message.reply_text("❌ Bu komutu kullanabilmem için grupta 'Kullanıcıları Yasakla' yetkimin olması gerekiyor!")
+            return
+
         # Önce banlayıp hemen unban ederek 'kick' simülasyonu yap
         await client.ban_chat_member(message.chat.id, user_id)
         await client.unban_chat_member(message.chat.id, user_id)
         await message.reply_text(f"👋 **{user_name}** kendi isteğiyle gruptan ayrıldı.")
+    except RPCError as e:
+        if "CHAT_ADMIN_REQUIRED" in str(e):
+            await message.reply_text("❌ Bu komutu çalıştırabilmem için grupta yönetici olmam gerekiyor!")
+        else:
+            logger.warning(f"kickme RPC uyarısı: {e}")
+            await message.reply_text("❌ Gruptan çıkarılamadınız. Botun yetkilerini kontrol edin.")
     except Exception as e:
-        logger.error(f"kickme hatası: {e}")
+        logger.warning(f"kickme hatası: {e}")
         await message.reply_text("❌ Gruptan çıkarılamadınız. Botun yetkilerini kontrol edin.")

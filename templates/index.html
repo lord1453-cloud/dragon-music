@@ -502,6 +502,23 @@
                 padding: 12px 14px;
             }
         }
+
+        /* ── Load More & Animations ─────────────────────────── */
+        @keyframes fadeInRow {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .btn-load-more:hover:not(:disabled) {
+            background: linear-gradient(135deg, rgba(225, 29, 72, 0.35), rgba(249, 115, 22, 0.35)) !important;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(225, 29, 72, 0.3) !important;
+        }
+
+        .btn-show-all:hover {
+            background: rgba(255, 255, 255, 0.1) !important;
+            color: #ffffff !important;
+        }
     </style>
 </head>
 <body>
@@ -704,17 +721,39 @@
             </table>
         </div>
 
+        <!-- ── Load More / Sayfalama Kontrolleri ───────────────── -->
+        <div id="loadMoreContainer" style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 24px; gap: 12px;">
+            <div id="paginationInfo" style="font-size: 13px; color: var(--text-muted); font-weight: 500;">
+                Gösterilen: <span id="displayedCount" style="color: #f8fafc; font-weight: 700;">0</span> / <span id="totalFilterCount" style="color: #f8fafc; font-weight: 700;">{{ groups|length }}</span> Sohbet
+            </div>
+            
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;">
+                <button id="loadMoreBtn" onclick="loadMoreRows()" class="btn-load-more" style="background: linear-gradient(135deg, rgba(225, 29, 72, 0.2), rgba(249, 115, 22, 0.2)); border: 1px solid rgba(225, 29, 72, 0.4); color: #fda4af; padding: 10px 24px; border-radius: 12px; font-weight: 700; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; box-shadow: 0 4px 15px rgba(225, 29, 72, 0.15);">
+                    <span>⬇️</span> Daha Fazla Göster (Load More)
+                </button>
+                <button id="showAllBtn" onclick="showAllRows()" class="btn-show-all" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: var(--text-muted); padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s;">
+                    Tümünü Göster
+                </button>
+            </div>
+        </div>
+
     </div>
 
     <!-- ── Filter & Live Scripts ──────────────────────────── -->
     <script>
-        function filterTable() {
+        const PAGE_SIZE = 10;
+        let currentLimit = PAGE_SIZE;
+
+        function filterTable(resetLimit = true) {
+            if (resetLimit) {
+                currentLimit = PAGE_SIZE;
+            }
             const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
             const typeVal = document.getElementById('typeFilter').value;
             const roleVal = document.getElementById('roleFilter').value;
             const rows = document.querySelectorAll('.group-row');
 
-            let visibleCount = 0;
+            let matchedRows = [];
 
             rows.forEach(row => {
                 const searchData = row.getAttribute('data-search') || '';
@@ -726,15 +765,75 @@
                 const matchesRole = !roleVal || rowRole === roleVal || (roleVal === 'admin' && row.querySelector('.badge-admin'));
 
                 if (matchesSearch && matchesType && matchesRole) {
-                    row.style.display = '';
-                    visibleCount++;
+                    matchedRows.push(row);
                 } else {
                     row.style.display = 'none';
                 }
             });
 
-            document.getElementById('visibleCount').innerText = visibleCount;
+            const totalMatches = matchedRows.length;
+            const visibleCountEl = document.getElementById('visibleCount');
+            const totalFilterCountEl = document.getElementById('totalFilterCount');
+            const displayedCountEl = document.getElementById('displayedCount');
+
+            if (visibleCountEl) visibleCountEl.innerText = totalMatches;
+            if (totalFilterCountEl) totalFilterCountEl.innerText = totalMatches;
+
+            // currentLimit kadar satırı görünür yap
+            let displayed = 0;
+            matchedRows.forEach((row, idx) => {
+                if (idx < currentLimit) {
+                    row.style.display = '';
+                    row.style.animation = 'fadeInRow 0.25s ease forwards';
+                    displayed++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            if (displayedCountEl) displayedCountEl.innerText = displayed;
+
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            const showAllBtn = document.getElementById('showAllBtn');
+            const loadMoreContainer = document.getElementById('loadMoreContainer');
+
+            if (loadMoreContainer && loadMoreBtn) {
+                if (totalMatches === 0) {
+                    loadMoreContainer.style.display = 'none';
+                } else {
+                    loadMoreContainer.style.display = 'flex';
+                    const remaining = totalMatches - displayed;
+                    if (remaining > 0) {
+                        loadMoreBtn.disabled = false;
+                        loadMoreBtn.style.opacity = '1';
+                        loadMoreBtn.style.cursor = 'pointer';
+                        loadMoreBtn.innerHTML = `<span>⬇️</span> Daha Fazla Göster (${remaining} sohbet kaldı)`;
+                        if (showAllBtn) showAllBtn.style.display = 'inline-block';
+                    } else {
+                        loadMoreBtn.disabled = true;
+                        loadMoreBtn.style.opacity = '0.5';
+                        loadMoreBtn.style.cursor = 'default';
+                        loadMoreBtn.innerHTML = `<span>✅</span> Tüm Sohbetler Listelendi`;
+                        if (showAllBtn) showAllBtn.style.display = 'none';
+                    }
+                }
+            }
         }
+
+        function loadMoreRows() {
+            currentLimit += PAGE_SIZE;
+            filterTable(false);
+        }
+
+        function showAllRows() {
+            currentLimit = 999999;
+            filterTable(false);
+        }
+
+        // Sayfa ilk yüklendiğinde varsayılan 10 satırı göster
+        document.addEventListener('DOMContentLoaded', () => {
+            filterTable(true);
+        });
 
         function openBroadcastModal() {
             document.getElementById('broadcastModal').style.display = 'flex';
