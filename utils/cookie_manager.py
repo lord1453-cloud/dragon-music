@@ -265,9 +265,10 @@ def get_auth_strategies(
     1. Tarayıcı Çerezleri (--cookies-from-browser: chrome, firefox vb.)
     2. Dışarıdan Verilen veya Yapılandırılan cookies.txt Dosyası
     3. Otomatik Üretilen Misafir Çerezleri (guest_cookies.txt)
-    4. Sunucu / Headless Bypass 1: TV + Android İstemcileri + User-Agent Rotasyonu + EJS
-    5. Sunucu / Headless Bypass 2: iOS + Android İstemcileri + User-Agent Rotasyonu + EJS
-    6. Sunucu / Headless Bypass 3: Temiz Çerezsiz EJS Oturumu + User-Agent Rotasyonu
+    4. Sunucu / Headless Bypass 1: Web Embedded + TV Downgraded + Android (En güçlü bot bypass)
+    5. Sunucu / Headless Bypass 2: Mobile Web (MWeb) + Android + iOS
+    6. Sunucu / Headless Bypass 3: Android + TV Downgraded + Safari Web
+    7. Sunucu / Headless Bypass 4: Web Embedded + Web
     """
     import random
     strategies = []
@@ -302,27 +303,36 @@ def get_auth_strategies(
             "label": "Misafir Çerezleri",
         })
 
-    # 4. Aşama: Sunucu / Headless Bypass 1 (TV + Android İstemcisi)
+    # 4. Aşama: Sunucu / Headless Bypass 1 (Web Embedded + TV Downgraded + Android) - En güçlü bot bypass
     strategies.append({
         "type": "headless_bypass",
-        "player_client": ["tv", "android"],
+        "player_client": ["web_embedded", "tv_downgraded", "android"],
         "user_agent": random.choice(USER_AGENTS),
-        "label": "TV/Android İstemci Rotasyonu (Headless Bypass)",
+        "label": "Web Embedded/TV Downgraded (Headless Bot Bypass)",
     })
 
-    # 5. Aşama: Sunucu / Headless Bypass 2 (iOS + Android İstemcisi)
+    # 5. Aşama: Sunucu / Headless Bypass 2 (Mobile Web + Android + iOS)
     strategies.append({
         "type": "headless_bypass",
-        "player_client": ["ios", "android"],
+        "player_client": ["mweb", "android", "ios"],
         "user_agent": random.choice(USER_AGENTS),
-        "label": "iOS/Android İstemci Rotasyonu (Headless Bypass)",
+        "label": "MWeb/Android/iOS Rotasyonu (Headless Bypass)",
     })
 
-    # 6. Aşama: Temiz Çerezsiz EJS Oturumu
+    # 6. Aşama: Sunucu / Headless Bypass 3 (Android + TV Downgraded + Safari Web)
     strategies.append({
-        "type": "none",
+        "type": "headless_bypass",
+        "player_client": ["android", "tv_downgraded", "web_safari"],
         "user_agent": random.choice(USER_AGENTS),
-        "label": "Standart Çerezsiz EJS Oturumu",
+        "label": "Android/TV/Safari Rotasyonu (Headless Bypass)",
+    })
+
+    # 7. Aşama: Web Embedded + Web
+    strategies.append({
+        "type": "headless_bypass",
+        "player_client": ["web_embedded", "web"],
+        "user_agent": random.choice(USER_AGENTS),
+        "label": "Web Embedded/Web Oturumu",
     })
 
     return strategies
@@ -347,6 +357,7 @@ def build_ytdl_options(strategy: Optional[dict] = None, extra_opts: Optional[dic
         "skip_unavailable_fragments": True,
         "no_color": True,
         "remote_components": ["ejs:github"],
+        "js_runtimes": {"deno": {}, "node": {}, "quickjs": {}, "bun": {}},
         "http_headers": {
             "User-Agent": ua,
             "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",

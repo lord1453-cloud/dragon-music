@@ -154,6 +154,32 @@ async def search_media(
                     logger.debug(f"search_media deneme hatası ({strat_label}): {e}")
                 continue
 
+        # YouTube başarısız olduysa SoundCloud fallback dene
+        if not is_video and not clean_query.startswith(("http://", "https://")):
+            logger.info(f"🔄 YouTube araması engellendi, SoundCloud yedeği deneniyor: {clean_query}")
+            try:
+                sc_opts = build_ytdl_options(extra_opts={
+                    "extract_flat": "in_playlist",
+                    "skip_download": True,
+                })
+                with yt_dlp.YoutubeDL(sc_opts) as ydl:
+                    sc_info = ydl.extract_info(f"scsearch1:{clean_query}", download=False)
+                    if sc_info and "entries" in sc_info and sc_info["entries"]:
+                        sc_entry = sc_info["entries"][0]
+                        if sc_entry:
+                            return {
+                                "id": sc_entry.get("id"),
+                                "title": sc_entry.get("title") or clean_query,
+                                "url": sc_entry.get("webpage_url") or sc_entry.get("url"),
+                                "duration": sc_entry.get("duration", 0),
+                                "duration_str": _format_duration(sc_entry.get("duration", 0)),
+                                "uploader": sc_entry.get("uploader", "SoundCloud"),
+                                "thumbnail": sc_entry.get("thumbnail"),
+                                "filesize_approx": None,
+                            }
+            except Exception as sc_e:
+                logger.debug(f"SoundCloud fallback arama hatası: {sc_e}")
+
         if last_error:
             logger.error(f"search_media hatası ({clean_query}): {last_error}")
         return None
@@ -397,6 +423,52 @@ async def download_audio(
                     else:
                         logger.warning(f"Ses indirme deneme hatası ({strat_label}): {e}")
                     continue
+
+            # YouTube tamamen engellenirse SoundCloud üzerinden MP3 indirmeyi dene
+            logger.info(f"🔄 YouTube üzerinden indirme engellendi, SoundCloud failover deneniyor: {title}")
+            try:
+                sc_opts = build_ytdl_options(extra_opts={
+                    "format": "bestaudio/best",
+                    "outtmpl": output_template,
+                    "max_filesize": MAX_FILE_SIZE,
+                    "postprocessors": [
+                        {
+                            "key": "FFmpegExtractAudio",
+                            "preferredcodec": "mp3",
+                            "preferredquality": str(bitrate),
+                        }
+                    ],
+                })
+                with yt_dlp.YoutubeDL(sc_opts) as ydl:
+                    ydl.download([f"scsearch1:{title}"])
+
+                if not os.path.exists(target_mp3):
+                    candidates = glob.glob(os.path.join(TEMP_DIR, f"aud_{timestamp}_{safe_name}.*"))
+                    if candidates:
+                        final_path = candidates[0]
+                    else:
+                        final_path = None
+                else:
+                    final_path = target_mp3
+
+                if final_path and os.path.exists(final_path) and os.path.getsize(final_path) > MIN_VALID_SIZE:
+                    file_size = os.path.getsize(final_path)
+                    size_mb = round(file_size / (1024 * 1024), 2)
+                    logger.info(f"✅ SoundCloud failover ile MP3 başarıyla indirildi: {final_path}")
+                    return {
+                        "success": True,
+                        "file_path": final_path,
+                        "title": title,
+                        "performer": "SoundCloud",
+                        "duration": info.get("duration", 0),
+                        "duration_str": info.get("duration_str", "Bilinmiyor"),
+                        "file_size": file_size,
+                        "size_mb": size_mb,
+                        "bitrate": bitrate,
+                        "thumbnail": info.get("thumbnail"),
+                    }
+            except Exception as sc_err:
+                logger.error(f"SoundCloud MP3 indirme de başarısız: {sc_err}")
 
             logger.error(f"Ses indirme hatası ({title}): {last_err_msg}")
             return {"success": False, "error": "exception", "message": f"İndirme hatası: {last_err_msg}"}
